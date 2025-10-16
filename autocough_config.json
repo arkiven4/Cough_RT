@@ -1,0 +1,7 @@
+{
+    "cough_padding": 0.2,
+    "min_cough_len": 0.2,
+    "th_l_multiplier": 0.02,
+    "th_h_multiplier": 1,
+    "adaptive_method": "default"
+}
