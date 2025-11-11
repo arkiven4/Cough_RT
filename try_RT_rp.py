@@ -67,8 +67,8 @@ class CoughTk():
     STEP_DURATION = WINDOW_DURATION - OVERLAP_DURATION
 
     DEVICE_SOUND =  GLOBAL_CONFIG.DEVICE_SOUND # 'dmic_sv' "plughw:2,0"
-    REC_IND_FILE =  "/sys/class/gpio/gpio5/value" # "gpio12" "/sys/class/gpio/gpio5/value"
-    REC_STOP_FILE =  "/sys/class/gpio/gpio6/value" # "gpio12" "/sys/class/gpio/gpio6/value"
+    REC_IND_FILE =  GLOBAL_CONFIG.REC_IND_FILE # "gpio12" "/sys/class/gpio/gpio5/value"
+    REC_STOP_FILE =  GLOBAL_CONFIG.REC_STOP_FILE # "gpio12" "/sys/class/gpio/gpio6/value"
     RECORD_LENGTH = int(GLOBAL_CONFIG.RECORD_LENGTH * SAMPLE_RATE)
     AUDIO_POINT_START = round(0.3 * SAMPLE_RATE)
 
@@ -80,49 +80,52 @@ class CoughTk():
 
         # Main Window
         self.window = tk.Tk()
-        self.window.geometry("320x480")
-        self.window.title("Tk CoughAnalyzer")
-
-        # Title Label
-        self.lbltitle = tk.Label(self.window, text="TB Care")
-        self.lbltitle.pack(side=tk.TOP)
+        self.window.geometry("480x320")
+        self.window.title("TBCare - CoughAnalyzer")
+        self.current_page = 1
 
         # Window Font
         wndfont = font.Font(self.window, family="Liberation Mono", size=15)
-        self.lbltitle.config(font=wndfont)
+        #self.lbltitle.config(font=wndfont)
 
         # Info Frame
         self.infofrm = tk.Frame(self.window)
 
-        # Intertet Connection
+        # Create a sub-frame for IP and Internet status to be side by side
+        self.ip_internet_frame = tk.Frame(self.infofrm)
+
+        # Internet Connection
         self.internet_status = tk.StringVar()
         self.internet_status.set("Offline")
-        self.lb_internet = tk.Label(self.infofrm, textvariable=self.internet_status)
+        self.lb_internet = tk.Label(self.ip_internet_frame, textvariable=self.internet_status)
         self.lb_internet.config(font=wndfont)
-        self.lb_internet.pack(side=tk.BOTTOM)
+        self.lb_internet.pack(side=tk.RIGHT, padx=(10, 0))  # Add some padding between them
         thd_ip = Thread(target=self.getinternetstatsprocess).start()
 
         # Status Connection
         self.EdgeIP = tk.StringVar()
         self.EdgeIP.set(self.getwlanip())
-        self.sttconn = tk.Label(self.infofrm, textvariable=self.EdgeIP)
+        self.sttconn = tk.Label(self.ip_internet_frame, textvariable=self.EdgeIP)
         self.sttconn.config(font=wndfont)
-        self.sttconn.pack(side=tk.BOTTOM)
+        self.sttconn.pack(side=tk.LEFT)
         thd_ip = Thread(target=self.getipprocess).start()
+
+        # Pack the IP/Internet frame
+        self.ip_internet_frame.pack(side=tk.BOTTOM)
 
         # Solic Coughs Status
         self.solicoughcount = tk.StringVar()
-        self.solicoughcount.set("Solic Coughs: 0")
+        self.solicoughcount.set("Longi: 0 || Solic: 0")
         self.lb_coughso = tk.Label(self.infofrm, textvariable=self.solicoughcount)
         self.lb_coughso.config(font=wndfont)
         self.lb_coughso.pack(side=tk.BOTTOM)
 
         # Auto Coughs Status
-        self.autocoughcount = tk.StringVar()
-        self.autocoughcount.set("Auto Coughs: 0")
-        self.lb_cougha = tk.Label(self.infofrm, textvariable=self.autocoughcount)
-        self.lb_cougha.config(font=wndfont)
-        self.lb_cougha.pack(side=tk.BOTTOM)
+        # self.autocoughcount = tk.StringVar()
+        # self.autocoughcount.set("Auto Coughs: 0")
+        # self.lb_cougha = tk.Label(self.infofrm, textvariable=self.autocoughcount)
+        # self.lb_cougha.config(font=wndfont)
+        # self.lb_cougha.pack(side=tk.BOTTOM)
 
         thd_coughCount = Thread(target=self.getCoughCount).start()
 
@@ -139,21 +142,19 @@ class CoughTk():
         # Graph Frame
         self.graphfrm = tk.Frame()
         # Example Figure Plot
-        self.fig = Figure(figsize=(5, 1), dpi=100, facecolor='black')
+        self.fig = Figure(figsize=(5, 1), dpi=96, facecolor='black')
         self.ax = self.fig.add_subplot(111)
         self.ax.set_facecolor('black')
         #self.ax.grid(True, which='both', ls='-', color='#333333')
         self.ax.set_ylim(-1, 1)
         self.ax.set_xlim(-1, 1)
-        self.patch_plot = self.ax.add_patch(patches.Rectangle(
-            (-1.0, 0.0), 2.0, 1.0, linewidth=1, edgecolor='black', facecolor='blue'))
-
+        self.patch_plot = self.ax.add_patch(patches.Rectangle((-1.0, 0.0), 2.0, 1.0, linewidth=1, edgecolor='black', facecolor='blue'))
         style.use('ggplot')
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.graphfrm)
         self.canvas.draw()
         self.canvas.get_tk_widget().pack(side=tk.LEFT)
         self.last_updateFigure = time.time()
-        self.graphfrm.pack(side=tk.BOTTOM, expand=True)
+        self.graphfrm.pack(side=tk.BOTTOM)
 
         # Graph Data
         self.graphfrm2 = tk.Frame()
@@ -170,7 +171,7 @@ class CoughTk():
         for _ in range(self.waveform_samples):
             self.audio_accumulator.append(0.0)
         # Example Figure Plot
-        self.fig2 = Figure(figsize=(5, 2), dpi=100,facecolor='black')
+        self.fig2 = Figure(figsize=(5, 2.5), dpi=96,facecolor='black')
         self.ax2 = self.fig2.add_subplot(111)
         self.ax2.set_facecolor('black')
         self.ax2.grid(True, which='both', ls='-', color='#333333')
@@ -181,20 +182,23 @@ class CoughTk():
         self.canvas2 = FigureCanvasTkAgg(self.fig2, master=self.graphfrm2)
         self.canvas2.draw()
         self.canvas2.get_tk_widget().pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        self.graphfrm2.pack(side=tk.BOTTOM, expand=True)
+        self.graphfrm2.pack(side=tk.BOTTOM)
         self.downsample_counter = 0
         self.downsample_accumulator = 0.0
 
         # Dark Theme Config
         if self.DarkTheme:
             self.window.config(bg="black")
-            self.lbltitle.config(bg='black', fg='white')
+            #self.lbltitle.config(bg='black', fg='white')
             self.sttrecord.config(bg='black', fg='white')
-            self.lb_cougha.config(bg='black', fg='white')
+            #self.lb_cougha.config(bg='black', fg='white')
             self.lb_coughso.config(bg='black', fg='white')
             self.sttconn.config(bg='black', fg='white')
             self.lb_internet.config(bg='black', fg='white')
             self.infofrm.config(bg='black')
+            self.ip_internet_frame.config(bg='black')
+            self.graphfrm.config(bg='black')
+            self.graphfrm2.config(bg='black')
 
         # === Shared buffer ===
         self.audio_buffer = deque()
@@ -217,7 +221,7 @@ class CoughTk():
                        periodsize=self.PERIOD_SIZE, device=self.DEVICE_SOUND)
         
         Thread(target=self.record_audio_loop).start()
-        Thread(target=self.sendcoughdataprocess).start()
+        #Thread(target=self.sendcoughdataprocess).start()
         # Thread(target=self.sendstatusdeviceAPIprocess).start()
 
         # Main Loop
@@ -226,7 +230,7 @@ class CoughTk():
     def getwlanip(self):
         # wlp3s0 wlan0
         ipv4 = os.popen(
-            'ip addr show wlan0 | grep "\<inet\>" | awk \'{ print $2 }\' | awk -F "/" \'{ print $1 }\'').read().strip()
+            'ip addr show wlp3s0 | grep "\<inet\>" | awk \'{ print $2 }\' | awk -F "/" \'{ print $1 }\'').read().strip()
         return ipv4
 
     def getipprocess(self):
@@ -288,8 +292,7 @@ class CoughTk():
             autocoughcount = len(next(os.walk("Recorded_Data/automatic"))[2])
             solicoughcount = len(next(os.walk("Recorded_Data/soliced"))[2])
 
-            self.autocoughcount.set(f"Auto Coughs: {autocoughcount}")
-            self.solicoughcount.set(f"Solic Coughs: {solicoughcount}")
+            self.solicoughcount.set(f"Longi: {autocoughcount} |-| Solic: {solicoughcount}")
             time.sleep(3)
 
     def graphupdate(self, _):
