@@ -1,0 +1,17 @@
+
+
+X.Org X Server 1.21.1.8
+X Protocol Version 11, Revision 0
+Current Operating System: Linux batukpi 6.1.21-3-rpi-ARCH #1 SMP Wed Mar 29 12:54:36 MDT 2023 armv7l
+Kernel command line: coherent_pool=1M 8250.nr_uarts=1 snd_bcm2835.enable_headphones=0 snd_bcm2835.enable_headphones=1 snd_bcm2835.enable_hdmi=1 snd_bcm2835.enable_hdmi=0  smsc95xx.macaddr=88:A2:9E:21:D3:5E vc_mem.mem_base=0x3ec00000 vc_mem.mem_size=0x40000000  root=/dev/mmcblk0p2 rw rootwait console=ttyAMA0,115200 console=tty1 fsck.repair=yes  audit=0 quiet loglevel=0 fbcon=font:ProFont6x11
+ 
+Current version of pixman: 0.42.2
+	Before reporting problems, check http://wiki.x.org
+	to make sure that you have the latest version.
+Markers: (--) probed, (**) from config file, (==) default setting,
+	(++) from command line, (!!) notice, (II) informational,
+	(WW) warning, (EE) error, (NI) not implemented, (??) unknown.
+(==) Log file: "/var/log/Xorg.0.log", Time: Wed Nov 12 10:22:48 2025
+(==) Using config directory: "/etc/X11/xorg.conf.d"
+(==) Using system config directory "/usr/share/X11/xorg.conf.d"
+Matplotlib created a temporary config/cache directory at /tmp/matplotlib-d9964r_g because the default path (/home/alarm/.cache/matplotlib) is not a writable directory; it is highly recommended to set the MPLCONFIGDIR environment variable to a writable directory, in particular to speed up the import of Matplotlib and to better support multiprocessing.

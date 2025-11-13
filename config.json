@@ -2,6 +2,10 @@
     "DEVICE_ID": "303",
     "SERVER_DOMAIN": "http://100.95.38.45",
     "RECORD_LENGTH": 0,
+    "BTN1_FILE": "/sys/class/gpio/gpio5/value", 
+    "BTN2_FILE": "/sys/class/gpio/gpio6/value", 
+    "BTN3_FILE": "/sys/class/gpio/gpio26/value", 
+    "BTN4_FILE": "/sys/class/gpio/gpio13/value", 
     "DEVICE_SOUND": "dmic_sv", 
-    "SEND_COUGH": true
+    "SEND_COUGH": false
 }
