@@ -1,8 +1,10 @@
 {
     "DEVICE_ID": "303",
     "SERVER_DOMAIN": "http://100.95.38.45",
+    "WEBPANEL_ROOT": "/run/media/arkiven4/Other/Thesis/CoughThesis/PengambilanDataPrimer/web_panel",
     "RECORD_LENGTH": 0,
     "DEVICE_SOUND": "plughw:2,0", 
+    "DEVICE_WLAN": "wlp3s0", 
     "BTN1_FILE": "gpio5", 
     "BTN2_FILE": "gpio6", 
     "BTN3_FILE": "gpio7", 

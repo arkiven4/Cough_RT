@@ -75,7 +75,8 @@ class CoughTk():
     RECORD_LENGTH = int(GLOBAL_CONFIG.RECORD_LENGTH * SAMPLE_RATE)
     AUDIO_POINT_START = round(0.3 * SAMPLE_RATE)
 
-    WEBPANEL_ROOT = "/home/alarm/web_panel"
+    DEVICE_WLAN = GLOBAL_CONFIG.DEVICE_WLAN
+    WEBPANEL_ROOT = GLOBAL_CONFIG.WEBPANEL_ROOT
     SERVER_DOMAIN = GLOBAL_CONFIG.SERVER_DOMAIN
     DEVICE_ID = GLOBAL_CONFIG.DEVICE_ID
 
@@ -86,7 +87,7 @@ class CoughTk():
         self.window = tk.Tk()
         self.window.geometry("480x320")
         self.window.title("TBCare - CoughAnalyzer")
-        self.current_page = 1
+        self.current_page = 4
 
         self.main_frame = tk.Frame(self.window)
         self.main_frame.pack(fill=tk.BOTH, expand=True)
@@ -122,6 +123,9 @@ class CoughTk():
         self.solicoughcount.set("Longi: 0 || Solic: 0")
         self.txtrecord = tk.StringVar()
         self.txtrecord.set("Recording: Automatic")
+
+        self.current_patient = tk.StringVar()
+        self.current_patient.set("Not Set Yet")
 
         # Battery status variable
         self.battery_status = tk.StringVar()
@@ -259,91 +263,29 @@ class CoughTk():
         device_status_frame = tk.Frame(status_frame)
         device_status_frame.pack(fill=tk.X, pady=5)
         
-        # IP Status
-        ip_frame = tk.Frame(device_status_frame)
-        ip_frame.pack(fill=tk.X, pady=2)
-        ip_label = tk.Label(ip_frame, text="🌐 IP Address:", font=self.wndfont)
-        ip_label.pack(side=tk.LEFT)
-        self.home_ip_label = tk.Label(ip_frame, textvariable=self.EdgeIP, font=self.wndfont)
+        # Info 1
+        info1_frame = tk.Frame(device_status_frame)
+        info1_frame.pack(fill=tk.X, pady=2)
+        info1_label = tk.Label(info1_frame, text="🖥️ Device ID:", font=self.wndfont)
+        info1_label.pack(side=tk.LEFT)
+        self.home_ip_label = tk.Label(info1_frame, text=self.DEVICE_ID, font=self.wndfont)
         self.home_ip_label.pack(side=tk.LEFT, padx=(10, 0))
-        
-        # Internet Status
-        internet_frame = tk.Frame(device_status_frame)
-        internet_frame.pack(fill=tk.X, pady=2)
-        internet_label = tk.Label(internet_frame, text="🌍 Internet:", font=self.wndfont)
-        internet_label.pack(side=tk.LEFT)
-        self.home_internet_label = tk.Label(internet_frame, textvariable=self.internet_status, font=self.wndfont)
-        self.home_internet_label.pack(side=tk.LEFT, padx=(10, 0))
+
+        # Info 2
+        info2_frame = tk.Frame(device_status_frame)
+        info2_frame.pack(fill=tk.X, pady=2)
+        info2_label = tk.Label(info2_frame, text="👤 Current Patient:", font=self.wndfont)
+        info2_label.pack(side=tk.LEFT)
+        self.home_ip_label = tk.Label(info2_frame, textvariable=self.current_patient, font=self.wndfont)
+        self.home_ip_label.pack(side=tk.LEFT, padx=(10, 0))
         
         # Cough Count
         cough_frame = tk.Frame(device_status_frame)
         cough_frame.pack(fill=tk.X, pady=2)
-        cough_label = tk.Label(cough_frame, text="🔢 Cough Count:", font=self.wndfont)
+        cough_label = tk.Label(cough_frame, text="🔢 Cough Count", font=self.wndfont)
         cough_label.pack(side=tk.LEFT)
         self.home_cough_label = tk.Label(cough_frame, textvariable=self.solicoughcount, font=self.wndfont)
         self.home_cough_label.pack(side=tk.LEFT, padx=(10, 0))
-        
-        # Recording Status
-        record_frame = tk.Frame(device_status_frame)
-        record_frame.pack(fill=tk.X, pady=2)
-        record_label = tk.Label(record_frame, text="🎙️ Status:", font=self.wndfont)
-        record_label.pack(side=tk.LEFT)
-        self.home_record_label = tk.Label(record_frame, textvariable=self.txtrecord, font=self.wndfont)
-        self.home_record_label.pack(side=tk.LEFT, padx=(10, 0))
-        
-        # Instructions Frame
-        instructions_frame = tk.Frame(self.info_frame)
-        instructions_frame.pack(pady=20, padx=20, fill=tk.BOTH, expand=True)
-        
-        instructions_title = tk.Label(instructions_frame, text="📋 Device Instructions", font=self.title_font)
-        instructions_title.pack(pady=(0, 10))
-        
-        # Button Instructions
-        btn_frame = tk.Frame(instructions_frame)
-        btn_frame.pack(fill=tk.X)
-        
-        # Button 1 instruction
-        btn1_frame = tk.Frame(btn_frame)
-        btn1_frame.pack(fill=tk.X, pady=3)
-        btn1_label = tk.Label(btn1_frame, text="🔴 Button 1:", font=self.wndfont)
-        btn1_label.pack(side=tk.LEFT)
-        btn1_desc = tk.Label(btn1_frame, text="Active & Passive Recording Page", font=self.wndfont)
-        btn1_desc.pack(side=tk.LEFT, padx=(10, 0))
-        
-        # Button 2 instruction
-        btn2_frame = tk.Frame(btn_frame)
-        btn2_frame.pack(fill=tk.X, pady=3)
-        btn2_label = tk.Label(btn2_frame, text="🟡 Button 2:", font=self.wndfont)
-        btn2_label.pack(side=tk.LEFT)
-        btn2_desc = tk.Label(btn2_frame, text="Instant Cough Prediction Page", font=self.wndfont)
-        btn2_desc.pack(side=tk.LEFT, padx=(10, 0))
-        
-        # Button 3 instruction
-        btn3_frame = tk.Frame(btn_frame)
-        btn3_frame.pack(fill=tk.X, pady=3)
-        btn3_label = tk.Label(btn3_frame, text="🔵 Button 3:", font=self.wndfont)
-        btn3_label.pack(side=tk.LEFT)
-        btn3_desc = tk.Label(btn3_frame, text="Information Page", font=self.wndfont)
-        btn3_desc.pack(side=tk.LEFT, padx=(10, 0))
-        
-        # Additional info
-        info_frame = tk.Frame(instructions_frame)
-        info_frame.pack(fill=tk.X, pady=10)
-        
-        info_text = tk.Label(info_frame, 
-                           text="💡 The device automatically detects and records cough sounds.\n"
-                                "Manual recording allows you to capture specific cough samples.\n"
-                                "All recordings are saved and can be uploaded when online.",
-                           font=self.wndfont, justify=tk.LEFT, wraplength=400)
-        info_text.pack()
-        
-        # Navigation buttons
-        nav_frame = tk.Frame(self.info_frame)
-        nav_frame.pack(side=tk.BOTTOM, pady=10)
-        
-        analyzer_btn = tk.Button(nav_frame, text="📊 Go to Analyzer", 
-                               command=lambda: self.show_page(2), font=self.wndfont)
-        analyzer_btn.pack()
 
     def create_analyzer_page(self):
         """Create the analyzer page (original functionality)"""
@@ -363,21 +305,10 @@ class CoughTk():
         # Info Frame
         self.infofrm = tk.Frame(self.analyzer_frame)
 
-        # Create a sub-frame for IP and Internet status to be side by side
-        self.ip_internet_frame = tk.Frame(self.infofrm)
-
-        # Internet Connection
-        self.lb_internet = tk.Label(self.ip_internet_frame, textvariable=self.internet_status)
-        self.lb_internet.config(font=self.wndfont)
-        self.lb_internet.pack(side=tk.LEFT, padx=(10, 0))
-
-        # Status Connection 
-        self.sttconn = tk.Label(self.ip_internet_frame, textvariable=self.EdgeIP)
-        self.sttconn.config(font=self.wndfont)
-        self.sttconn.pack(side=tk.RIGHT)
-
-        # Pack the IP/Internet frame
-        self.ip_internet_frame.pack(side=tk.TOP)
+        # Solic Coughs Status
+        self.lb_patient = tk.Label(self.infofrm, textvariable=self.current_patient)
+        self.lb_patient.config(font=self.wndfont)
+        self.lb_patient.pack(side=tk.TOP)
 
         # Solic Coughs Status
         self.lb_coughso = tk.Label(self.infofrm, textvariable=self.solicoughcount)
@@ -463,22 +394,6 @@ class CoughTk():
         self.pred_sttrecord.config(font=self.wndfont)
         self.pred_sttrecord.pack(side=tk.TOP)
 
-        # Create a sub-frame for IP and Internet status to be side by side
-        self.pred_ip_internet_frame = tk.Frame(self.pred_infofrm)
-
-        # Status Connection
-        self.pred_sttconn = tk.Label(self.pred_ip_internet_frame, textvariable=self.EdgeIP)
-        self.pred_sttconn.config(font=self.wndfont)
-        self.pred_sttconn.pack(side=tk.RIGHT)
-
-        # Internet Connection
-        self.pred_lb_internet = tk.Label(self.pred_ip_internet_frame, textvariable=self.internet_status)
-        self.pred_lb_internet.config(font=self.wndfont)
-        self.pred_lb_internet.pack(side=tk.LEFT, padx=(10, 0))
-
-        # Pack the IP/Internet frame
-        self.pred_ip_internet_frame.pack(side=tk.TOP)
-
         # Pack Info Frame
         self.pred_infofrm.pack(side=tk.TOP)
 
@@ -546,7 +461,7 @@ class CoughTk():
     def manual_prediction(self):
         """Manually trigger prediction on the last recorded cough"""
         self.prediction_status.set("🔄 Analyzing cough sample...")
-        
+        time.sleep(2)
         # Simulate prediction (replace with actual ML model)
         import random
         tb_prob = random.uniform(0, 100)
@@ -590,7 +505,6 @@ class CoughTk():
             self.prediction_frame.pack(fill=tk.BOTH, expand=True)
             self.current_page = 3
             self.txtrecord.set("Ready to Record")
-            self.manual_prediction()
         elif page_num == 4:
             self.home_frame.pack_forget()
             self.analyzer_frame.pack_forget()
@@ -631,16 +545,20 @@ class CoughTk():
         for widget in self.analyzer_frame.winfo_children():
             self.configure_widget_dark_theme(widget)
 
-        # Analyzer page elements
-        self.analyzer_frame.config(bg="black")
-        self.sttrecord.config(bg='black', fg='white')
-        self.lb_coughso.config(bg='black', fg='white')
-        self.sttconn.config(bg='black', fg='white')
-        self.lb_internet.config(bg='black', fg='white')
-        self.infofrm.config(bg='black')
-        self.ip_internet_frame.config(bg='black')
-        self.graphfrm.config(bg='black')
-        self.graphfrm2.config(bg='black')
+        self.info_frame.config(bg="black")
+        for widget in self.info_frame.winfo_children():
+            self.configure_widget_dark_theme(widget)
+
+        # # Analyzer page elements
+        # self.analyzer_frame.config(bg="black")
+        # self.sttrecord.config(bg='black', fg='white')
+        # self.lb_coughso.config(bg='black', fg='white')
+        # self.sttconn.config(bg='black', fg='white')
+        # self.lb_internet.config(bg='black', fg='white')
+        # self.infofrm.config(bg='black')
+        # self.ip_internet_frame.config(bg='black')
+        # self.graphfrm.config(bg='black')
+        # self.graphfrm2.config(bg='black')
 
         # Home page elements
         self.prediction_frame.config(bg="black")
@@ -668,6 +586,7 @@ class CoughTk():
         Thread(target=self.getinternetstatsprocess, daemon=True).start()
         Thread(target=self.getipprocess, daemon=True).start()
         Thread(target=self.getCoughCount, daemon=True).start()
+        Thread(target=self.getCurrentPatient, daemon=True).start()
         Thread(target=self.button_navigation_loop, daemon=True).start()
         Thread(target=self.record_audio_loop, daemon=True).start()
             
@@ -675,7 +594,7 @@ class CoughTk():
     def getwlanip(self):
         # wlp3s0 wlan0
         ipv4 = os.popen(
-            'ip addr show wlan0 | grep "\<inet\>" | awk \'{ print $2 }\' | awk -F "/" \'{ print $1 }\'').read().strip()
+            'ip addr show '+ self.DEVICE_WLAN +' | grep "\<inet\>" | awk \'{ print $2 }\' | awk -F "/" \'{ print $1 }\'').read().strip()
         return ipv4
 
     def getipprocess(self):
@@ -686,6 +605,22 @@ class CoughTk():
                 "0.0.0.0"
             self.EdgeIP.set("📡" + ipstring)
             time.sleep(10)
+
+    def getCurrentPatient(self):
+        """Get IP Loop"""
+        while True:
+            try:
+                with open(self.WEBPANEL_ROOT + '/data/current_patient.json') as pf:
+                    patient = json.load(pf)
+                    patient_nik = patient.get('nik') or patient.get('NIK') or patient.get('id') or "unknown"
+                    if not patient_nik:
+                        patient_nik = "unknown"
+                    self.current_patient.set(f"👤 {patient.get('nik')} ({patient.get('name')})")
+            except Exception as e:
+                logging.error(f"[ERROR]: {e}")
+                self.current_patient.set(f"❌ {str(e)}")
+            time.sleep(5)
+
 
     def button_navigation_loop(self):
         """Handle button navigation between pages"""
@@ -862,7 +797,10 @@ class CoughTk():
 
                                 logging.info(f"[DEBUG] Recording stopped. Buffer length: {len(self.audio_buffer)}, RECORD_LENGTH: {self.RECORD_LENGTH}")
 
-                                self.txtrecord.set("Recording: Automatic")
+                                if self.current_page == 2:
+                                    self.txtrecord.set("Recording: Automatic")
+                                elif self.current_page == 3:
+                                    self.txtrecord.set("Ready to Record")
                                 self.patch_plot.set_facecolor('blue')
                                 self.do_updatefigure(ignore_cooldown=True)
 
@@ -961,44 +899,50 @@ class CoughTk():
                 #self.last_cough_np = now_cough
 
     def handle_record_soli(self, audio_np):
-        try:
-            logging.info(f"[INFO] Processing solicited recording with shape: {audio_np.shape}")
-            if len(audio_np) == 0:
-                logging.warning("[WARNING] Empty audio data for solicited recording")
-                return
-
-            patient_nik = "unknown"
+        if self.current_page == 2:
             try:
-                with open('/home/alarm/web_panel/data/current_patient.json') as pf:
-                    patient = json.load(pf)
-                    patient_nik = patient.get('nik') or patient.get('NIK') or patient.get('id') or "unknown"
-                    if not patient_nik:
-                        patient_nik = "unknown"
-            except Exception as e:
-                logging.warning(f"[WARNING] Could not read current_patient.json: {e}")
+                logging.info(f"[INFO] Processing solicited recording with shape: {audio_np.shape}")
+                if len(audio_np) == 0:
+                    logging.warning("[WARNING] Empty audio data for solicited recording")
+                    return
 
-            # ensure patient-specific folder exists
-            patient_dir = os.path.join("Recorded_Data", "soliced", str(patient_nik))
-            os.makedirs(patient_dir, exist_ok=True)
+                patient_nik = "unknown"
+                try:
+                    with open('/home/alarm/web_panel/data/current_patient.json') as pf:
+                        patient = json.load(pf)
+                        patient_nik = patient.get('nik') or patient.get('NIK') or patient.get('id') or "unknown"
+                        if not patient_nik:
+                            patient_nik = "unknown"
+                except Exception as e:
+                    logging.warning(f"[WARNING] Could not read current_patient.json: {e}")
 
-            onlyfiles = []
-            try:
-                onlyfiles = next(os.walk(patient_dir))[2]
-            except StopIteration:
+                # ensure patient-specific folder exists
+                patient_dir = os.path.join("Recorded_Data", "soliced", str(patient_nik))
+                os.makedirs(patient_dir, exist_ok=True)
+
                 onlyfiles = []
-            cough_count = len(onlyfiles) + 1
-            
-            audio_np = audio_np[self.AUDIO_POINT_START:]
-            timestamp = datetime.now().strftime("%d-%m-%Y_%H%M")
-            filename = f'{timestamp}_{cough_count}.wav'
-            filepath = os.path.join(patient_dir, filename)
-            sf.write(filepath, audio_np, self.SAMPLE_RATE, 'PCM_24')
-            
-            logging.info(f"[INFO] Saved solicited recording: {filename}")
-            rel_path = os.path.join(str(patient_nik), filename)
-            self.append_to_lastsend_json("last_send_soliced", rel_path)
-        except Exception as e:
-            logging.error(f"[ERROR] Failed to save solicited recording: {e}")
+                try:
+                    onlyfiles = next(os.walk(patient_dir))[2]
+                except StopIteration:
+                    onlyfiles = []
+                cough_count = len(onlyfiles) + 1
+                
+                audio_np = audio_np[self.AUDIO_POINT_START:]
+                timestamp = datetime.now().strftime("%d-%m-%Y_%H%M")
+                filename = f'{timestamp}_{cough_count}.wav'
+                filepath = os.path.join(patient_dir, filename)
+                sf.write(filepath, audio_np, self.SAMPLE_RATE, 'PCM_24')
+                
+                logging.info(f"[INFO] Saved solicited recording: {filename}")
+                rel_path = os.path.join(str(patient_nik), filename)
+                self.append_to_lastsend_json("last_send_soliced", rel_path)
+            except Exception as e:
+                logging.error(f"[ERROR] Failed to save solicited recording: {e}")
+        elif self.current_page == 3:
+            self.txtrecord.set("Waiting For Prediction to complete....")
+            self.manual_prediction()
+            self.txtrecord.set("Ready to Record")
+
 
     def method_similarity_ratio(self, a, b):
         if a.shape != b.shape:
