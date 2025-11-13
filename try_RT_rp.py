@@ -75,6 +75,7 @@ class CoughTk():
     RECORD_LENGTH = int(GLOBAL_CONFIG.RECORD_LENGTH * SAMPLE_RATE)
     AUDIO_POINT_START = round(0.3 * SAMPLE_RATE)
 
+    WEBPANEL_ROOT = "/home/alarm/web_panel"
     SERVER_DOMAIN = GLOBAL_CONFIG.SERVER_DOMAIN
     DEVICE_ID = GLOBAL_CONFIG.DEVICE_ID
 
@@ -156,7 +157,7 @@ class CoughTk():
         # Info
         info_label = tk.Label(status_bar, text="Tim PKM-KC TBCare ITS", font=self.small_font)
         info_label.pack(side=tk.LEFT, padx=(75, 0))
-        
+                
         # Battery Status (Right)
         battery_label = tk.Label(status_bar, textvariable=self.battery_status, font=self.small_font)
         battery_label.pack(side=tk.RIGHT)
@@ -425,6 +426,8 @@ class CoughTk():
         self.fig2 = Figure(figsize=(5, 2.5), dpi=96,facecolor='black')
         self.ax2 = self.fig2.add_subplot(111)
         self.ax2.set_facecolor('black')
+        self.ax2.get_xaxis().set_visible(False)
+        self.ax2.get_yaxis().set_visible(False)
         self.ax2.grid(True, which='both', ls='-', color='#333333')
         self.ax2.set_ylim(-0.2, 0.2)
         self.ax2.set_xlim(0, len(self.X) - 1)
@@ -672,7 +675,7 @@ class CoughTk():
     def getwlanip(self):
         # wlp3s0 wlan0
         ipv4 = os.popen(
-            'ip addr show wlp3s0 | grep "\<inet\>" | awk \'{ print $2 }\' | awk -F "/" \'{ print $1 }\'').read().strip()
+            'ip addr show wlan0 | grep "\<inet\>" | awk \'{ print $2 }\' | awk -F "/" \'{ print $1 }\'').read().strip()
         return ipv4
 
     def getipprocess(self):
@@ -742,9 +745,9 @@ class CoughTk():
             try:
                 socket.setdefaulttimeout(timeout)
                 socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect((host, port))
-                self.internet_status.set("🌍On |")
+                self.internet_status.set("🌍On|")
             except socket.error:
-                self.internet_status.set("📵Off |")
+                self.internet_status.set("📵Off|")
 
             time.sleep(5)
 
@@ -785,7 +788,23 @@ class CoughTk():
     def getCoughCount(self):
         while True:
             autocoughcount = len(next(os.walk("Recorded_Data/automatic"))[2])
-            solicoughcount = len(next(os.walk("Recorded_Data/soliced"))[2])
+            solicoughcount = 0
+            try:
+                with open(self.WEBPANEL_ROOT + '/data/current_patient.json') as pf:
+                    patient = json.load(pf)
+                    patient_nik = patient.get('nik') or patient.get('NIK') or patient.get('id') or "unknown"
+                    if not patient_nik:
+                        patient_nik = "unknown"
+                
+                patient_dir = os.path.join("Recorded_Data", "soliced", str(patient_nik))
+                if os.path.exists(patient_dir):
+                    solicoughcount = len(next(os.walk(patient_dir))[2])
+            except Exception as e:
+                logging.warning(f"[WARNING] Could not read current_patient.json or count files: {e}")
+                try:
+                    solicoughcount = len(next(os.walk("Recorded_Data/soliced"))[2])
+                except:
+                    solicoughcount = 0
 
             self.solicoughcount.set(f"Longi: {autocoughcount} |-| Solic: {solicoughcount}")
             time.sleep(3)
@@ -914,9 +933,9 @@ class CoughTk():
         # Extract parameters with defaults
         cough_padding = cough_config.get('cough_padding', 0.2)
         min_cough_len = cough_config.get('min_cough_len', 0.2)
-        th_l_multiplier = cough_config.get('th_l_multiplier', 0.08)
-        th_h_multiplier = cough_config.get('th_h_multiplier', 2)
-        adaptive_method = cough_config.get('adaptive_method', 'combination')
+        th_l_multiplier = cough_config.get('th_l_multiplier', 0.02)
+        th_h_multiplier = cough_config.get('th_h_multiplier', 1)
+        adaptive_method = cough_config.get('adaptive_method', 'default')
     
         coughSegments, cough_mask = segment_cough(audio_np, self.SAMPLE_RATE, 
                                                 cough_padding=cough_padding, 
@@ -947,17 +966,37 @@ class CoughTk():
             if len(audio_np) == 0:
                 logging.warning("[WARNING] Empty audio data for solicited recording")
                 return
-                
-            onlyfiles = next(os.walk("Recorded_Data/soliced"))[2]
+
+            patient_nik = "unknown"
+            try:
+                with open('/home/alarm/web_panel/data/current_patient.json') as pf:
+                    patient = json.load(pf)
+                    patient_nik = patient.get('nik') or patient.get('NIK') or patient.get('id') or "unknown"
+                    if not patient_nik:
+                        patient_nik = "unknown"
+            except Exception as e:
+                logging.warning(f"[WARNING] Could not read current_patient.json: {e}")
+
+            # ensure patient-specific folder exists
+            patient_dir = os.path.join("Recorded_Data", "soliced", str(patient_nik))
+            os.makedirs(patient_dir, exist_ok=True)
+
+            onlyfiles = []
+            try:
+                onlyfiles = next(os.walk(patient_dir))[2]
+            except StopIteration:
+                onlyfiles = []
             cough_count = len(onlyfiles) + 1
             
             audio_np = audio_np[self.AUDIO_POINT_START:]
             timestamp = datetime.now().strftime("%d-%m-%Y_%H%M")
-            filename = f'Recorded_Data/soliced/{timestamp}_{cough_count}.wav'
-            sf.write(filename, audio_np, self.SAMPLE_RATE, 'PCM_24')
+            filename = f'{timestamp}_{cough_count}.wav'
+            filepath = os.path.join(patient_dir, filename)
+            sf.write(filepath, audio_np, self.SAMPLE_RATE, 'PCM_24')
             
             logging.info(f"[INFO] Saved solicited recording: {filename}")
-            self.append_to_lastsend_json("last_send_soliced", os.path.basename(filename))
+            rel_path = os.path.join(str(patient_nik), filename)
+            self.append_to_lastsend_json("last_send_soliced", rel_path)
         except Exception as e:
             logging.error(f"[ERROR] Failed to save solicited recording: {e}")
 
@@ -999,12 +1038,21 @@ class CoughTk():
             nowfile = f'Recorded_Data/{folder_send}/{nowfile_base}'
             if os.path.exists(nowfile):
                 logging.warning(f"[SENDING]: {nowfile}")
+
+                patient_nik = "unknown"
+                if '/' in nowfile_base:
+                    patient_nik = nowfile_base.split('/')[0]
+                elif folder_send == "soliced":
+                    path_parts = nowfile.split('/')
+                    if len(path_parts) >= 3:
+                        patient_nik = path_parts[-2]
+
                 try:
                     with open(nowfile, 'rb') as f:
                         response = requests.post(
                             f"{self.SERVER_DOMAIN}/api/device/sendData_TBPrimer/{self.DEVICE_ID}", 
                             files={'file_batuk': f}, 
-                            data={'nama': 'pasien', 'gender': 'unknown', 'umur': 0, 'cough_type': file_prefix},
+                            data={'nama': 'pasien', 'gender': 'unknown', 'umur': 0, 'cough_type': file_prefix, 'nik': patient_nik},
                             timeout=30
                         )
                     logging.warning(f"[SENDING_STATUS]: {response.status_code}")
