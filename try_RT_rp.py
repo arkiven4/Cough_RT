@@ -548,18 +548,7 @@ class CoughTk():
         self.info_frame.config(bg="black")
         for widget in self.info_frame.winfo_children():
             self.configure_widget_dark_theme(widget)
-
-        # # Analyzer page elements
-        # self.analyzer_frame.config(bg="black")
-        # self.sttrecord.config(bg='black', fg='white')
-        # self.lb_coughso.config(bg='black', fg='white')
-        # self.sttconn.config(bg='black', fg='white')
-        # self.lb_internet.config(bg='black', fg='white')
-        # self.infofrm.config(bg='black')
-        # self.ip_internet_frame.config(bg='black')
-        # self.graphfrm.config(bg='black')
-        # self.graphfrm2.config(bg='black')
-
+            
         # Home page elements
         self.prediction_frame.config(bg="black")
         for widget in self.prediction_frame.winfo_children():
