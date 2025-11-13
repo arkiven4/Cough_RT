@@ -1002,7 +1002,6 @@ class CoughTk():
         # wlp3s0 wlan0
         ipv4 = os.popen(
             'ip addr show '+ self.DEVICE_WLAN +' | grep "\<inet\>" | awk \'{ print $2 }\' | awk -F "/" \'{ print $1 }\'').read().strip()
-            'ip addr show '+ self.DEVICE_WLAN +' | grep "\<inet\>" | awk \'{ print $2 }\' | awk -F "/" \'{ print $1 }\'').read().strip()
         return ipv4
 
     def getipprocess(self):
