@@ -199,7 +199,7 @@ class CoughTk():
         # Button 1 instruction
         btn0_frame = tk.Frame(btn_frame)
         btn0_frame.pack(fill=tk.X, pady=3)
-        btn0_label = tk.Label(btn0_frame, text="🔴 Button 1:", font=self.wndfont)
+        btn0_label = tk.Label(btn0_frame, text="► Button 1:", font=self.wndfont)
         btn0_label.pack(side=tk.LEFT)
         btn0_desc = tk.Label(btn0_frame, text="Active & Passive Recording Page", font=self.wndfont)
         btn0_desc.pack(side=tk.LEFT, padx=(10, 0))
@@ -207,21 +207,21 @@ class CoughTk():
         # Button 1 instruction
         btn1_frame = tk.Frame(btn_frame)
         btn1_frame.pack(fill=tk.X, pady=3)
-        btn1_label = tk.Label(btn1_frame, text="🟡 Button 2:", font=self.wndfont)
+        btn1_label = tk.Label(btn1_frame, text="■ Button 2:", font=self.wndfont)
         btn1_label.pack(side=tk.LEFT)
         btn1_desc = tk.Label(btn1_frame, text="Instant Cough Prediction Page", font=self.wndfont)
         btn1_desc.pack(side=tk.LEFT, padx=(10, 0))
         
         btn2_frame = tk.Frame(btn_frame)
         btn2_frame.pack(fill=tk.X, pady=3)
-        btn2_label = tk.Label(btn2_frame, text="🔵 Button 3:", font=self.wndfont)
+        btn2_label = tk.Label(btn2_frame, text="ℹ️ Button 3:", font=self.wndfont)
         btn2_label.pack(side=tk.LEFT)
         btn2_desc = tk.Label(btn2_frame, text="Information Page", font=self.wndfont)
         btn2_desc.pack(side=tk.LEFT, padx=(10, 0))
         
         btn3_frame = tk.Frame(btn_frame)
         btn3_frame.pack(fill=tk.X, pady=3)
-        btn3_label = tk.Label(btn3_frame, text="🔴 Button 4:", font=self.wndfont)
+        btn3_label = tk.Label(btn3_frame, text="🔄 Button 4:", font=self.wndfont)
         btn3_label.pack(side=tk.LEFT)
         btn3_desc = tk.Label(btn3_frame, text="Show This Page", font=self.wndfont)
         btn3_desc.pack(side=tk.LEFT, padx=(10, 0))
@@ -604,7 +604,7 @@ class CoughTk():
                     patient_nik = patient.get('nik') or patient.get('NIK') or patient.get('id') or "unknown"
                     if not patient_nik:
                         patient_nik = "unknown"
-                    self.current_patient.set(f"👤 {patient.get('nik')} ({patient.get('name')})")
+                    self.current_patient.set(f"👤 {patient.get('name')}")
             except Exception as e:
                 logging.error(f"[ERROR]: {e}")
                 self.current_patient.set(f"❌ {str(e)}")
