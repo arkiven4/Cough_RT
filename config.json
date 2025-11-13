@@ -3,7 +3,9 @@
     "SERVER_DOMAIN": "http://100.95.38.45",
     "RECORD_LENGTH": 0,
     "DEVICE_SOUND": "plughw:2,0", 
-    "REC_IND_FILE": "gpio5", 
-    "REC_STOP_FILE": "gpio6", 
+    "BTN1_FILE": "gpio5", 
+    "BTN2_FILE": "gpio6", 
+    "BTN3_FILE": "gpio7", 
+    "BTN4_FILE": "gpio8", 
     "SEND_COUGH": true
 }

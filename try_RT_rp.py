@@ -8,6 +8,7 @@ from collections import deque
 from types import SimpleNamespace
 
 import tkinter as tk
+from tkinter import ttk
 from tkinter import font
 import threading
 
@@ -67,8 +68,10 @@ class CoughTk():
     STEP_DURATION = WINDOW_DURATION - OVERLAP_DURATION
 
     DEVICE_SOUND =  GLOBAL_CONFIG.DEVICE_SOUND # 'dmic_sv' "plughw:2,0"
-    REC_IND_FILE =  GLOBAL_CONFIG.REC_IND_FILE # "gpio12" "/sys/class/gpio/gpio5/value"
-    REC_STOP_FILE =  GLOBAL_CONFIG.REC_STOP_FILE # "gpio12" "/sys/class/gpio/gpio6/value"
+    BTN1_FILE =  GLOBAL_CONFIG.BTN1_FILE # "gpio12" "/sys/class/gpio/gpio5/value"
+    BTN2_FILE =  GLOBAL_CONFIG.BTN2_FILE # "gpio12" "/sys/class/gpio/gpio5/value"
+    BTN3_FILE =  GLOBAL_CONFIG.BTN3_FILE # "gpio12" "/sys/class/gpio/gpio6/value"
+    BTN4_FILE =  GLOBAL_CONFIG.BTN4_FILE # "gpio12" "/sys/class/gpio/gpio6/value"
     RECORD_LENGTH = int(GLOBAL_CONFIG.RECORD_LENGTH * SAMPLE_RATE)
     AUDIO_POINT_START = round(0.3 * SAMPLE_RATE)
 
@@ -84,68 +87,316 @@ class CoughTk():
         self.window.title("TBCare - CoughAnalyzer")
         self.current_page = 1
 
-        # Window Font
-        wndfont = font.Font(self.window, family="Liberation Mono", size=15)
-        #self.lbltitle.config(font=wndfont)
+        self.main_frame = tk.Frame(self.window)
+        self.main_frame.pack(fill=tk.BOTH, expand=True)
+        self.init_variables()
 
+        self.create_home_page()
+        self.create_analyzer_page()
+        self.create_prediction_page()
+        self.create_info_page()
+
+        self.show_page(self.current_page)
+
+        if self.DarkTheme:
+            self.configure_dark_theme()
+
+        self.start_background_processes()
+        self.window.mainloop()
+
+    def init_variables(self):
+        """Initialize shared variables for both pages"""
+        # Font
+        self.wndfont = font.Font(self.window, family="Liberation Mono", size=12)
+        self.title_font = font.Font(self.window, family="Liberation Mono", size=16, weight="bold")
+        self.subtitle_font = font.Font(self.window, family="Liberation Mono", size=14, weight="bold")
+        self.small_font = font.Font(self.window, family="Liberation Mono", size=9)
+        
+        # Status variablessxxxsx
+        self.internet_status = tk.StringVar()
+        self.internet_status.set("Offline")
+        self.EdgeIP = tk.StringVar()
+        self.EdgeIP.set(self.getwlanip())
+        self.solicoughcount = tk.StringVar()
+        self.solicoughcount.set("Longi: 0 || Solic: 0")
+        self.txtrecord = tk.StringVar()
+        self.txtrecord.set("Recording: Automatic")
+
+        # Battery status variable
+        self.battery_status = tk.StringVar()
+        self.battery_status.set("🔋100%")
+        
+        # Audio processing variables
+        self.audio_buffer = deque()
+        self.buffer_lock = Lock()
+        self.next_time = time.time()
+        self.RECORD_FLAG = False
+        self.last_cough_np = np.zeros((1000,))
+        self.recording_start_time = None
+        self.recording_time_thread = None
+        self.recording_time_stop_event = threading.Event()
+        self.buffer_size = int(self.STEP_DURATION * self.SAMPLE_RATE)
+        self.window_size = int(self.WINDOW_DURATION * self.SAMPLE_RATE)
+
+        # Initialize a
+        # udio system
+        self.pcm = alsa.PCM(alsa.PCM_CAPTURE, alsa.PCM_NORMAL,
+                       channels=self.CHANNELS, rate=self.SAMPLE_RATE, format=alsa.PCM_FORMAT_S16_LE,
+                       periodsize=self.PERIOD_SIZE, device=self.DEVICE_SOUND)
+
+    def create_status_bar(self, parent_frame):
+        """Create a universal status bar for all pages"""
+        status_bar = tk.Frame(parent_frame)
+        status_bar.pack(side=tk.TOP, fill=tk.X, padx=5, pady=2)
+        
+        # IP Address (Left)
+        ip_label = tk.Label(status_bar, textvariable=self.EdgeIP, font=self.small_font)
+        ip_label.pack(side=tk.LEFT)
+
+        # Info
+        info_label = tk.Label(status_bar, text="Tim PKM-KC TBCare ITS", font=self.small_font)
+        info_label.pack(side=tk.LEFT, padx=(75, 0))
+        
+        # Battery Status (Right)
+        battery_label = tk.Label(status_bar, textvariable=self.battery_status, font=self.small_font)
+        battery_label.pack(side=tk.RIGHT)
+        
+        # Connection Status (Center)
+        connection_label = tk.Label(status_bar, textvariable=self.internet_status, font=self.small_font)
+        connection_label.pack(side=tk.RIGHT, padx=(0, 5))
+        
+        # Store references for dark theme configuration
+        return [ip_label, info_label, battery_label, connection_label]
+
+    def create_home_page(self):
+        """Create the home page with device status and instructions"""
+        self.home_frame = tk.Frame(self.main_frame)
+
+        # Status Bar
+        self.home_status_widgets = self.create_status_bar(self.home_frame)
+        
+        # Separator
+        separator = ttk.Separator(self.home_frame, orient='horizontal')
+        separator.pack(fill=tk.X, pady=2)
+        
+        # Title
+        title_label = tk.Label(self.home_frame, text="🫁 TBCare Device", font=self.title_font)
+        title_label.pack(pady=10)
+        
+        # Instructions Frame
+        instructions_frame = tk.Frame(self.home_frame)
+        instructions_frame.pack(pady=5, padx=5, fill=tk.BOTH, expand=True)
+        
+        # Button Instructions
+        btn_frame = tk.Frame(instructions_frame)
+        btn_frame.pack(fill=tk.X)
+        
+        # Button 1 instruction
+        btn0_frame = tk.Frame(btn_frame)
+        btn0_frame.pack(fill=tk.X, pady=3)
+        btn0_label = tk.Label(btn0_frame, text="🔴 Button 1:", font=self.wndfont)
+        btn0_label.pack(side=tk.LEFT)
+        btn0_desc = tk.Label(btn0_frame, text="Active & Passive Recording Page", font=self.wndfont)
+        btn0_desc.pack(side=tk.LEFT, padx=(10, 0))
+
+        # Button 1 instruction
+        btn1_frame = tk.Frame(btn_frame)
+        btn1_frame.pack(fill=tk.X, pady=3)
+        btn1_label = tk.Label(btn1_frame, text="🟡 Button 2:", font=self.wndfont)
+        btn1_label.pack(side=tk.LEFT)
+        btn1_desc = tk.Label(btn1_frame, text="Instant Cough Prediction Page", font=self.wndfont)
+        btn1_desc.pack(side=tk.LEFT, padx=(10, 0))
+        
+        btn2_frame = tk.Frame(btn_frame)
+        btn2_frame.pack(fill=tk.X, pady=3)
+        btn2_label = tk.Label(btn2_frame, text="🔵 Button 3:", font=self.wndfont)
+        btn2_label.pack(side=tk.LEFT)
+        btn2_desc = tk.Label(btn2_frame, text="Information Page", font=self.wndfont)
+        btn2_desc.pack(side=tk.LEFT, padx=(10, 0))
+        
+        btn3_frame = tk.Frame(btn_frame)
+        btn3_frame.pack(fill=tk.X, pady=3)
+        btn3_label = tk.Label(btn3_frame, text="🔴 Button 4:", font=self.wndfont)
+        btn3_label.pack(side=tk.LEFT)
+        btn3_desc = tk.Label(btn3_frame, text="Show This Page", font=self.wndfont)
+        btn3_desc.pack(side=tk.LEFT, padx=(10, 0))
+        
+        separator = ttk.Separator(instructions_frame, orient='horizontal')
+        separator.pack(fill=tk.X, pady=5)
+
+        # Additional info
+        info_frame = tk.Frame(instructions_frame)
+        info_frame.pack(fill=tk.X, pady=10)
+        info_text = tk.Label(info_frame, 
+                           text="💡 The device automatically detects and records cough sounds.\n"
+                                "💡 Manual recording allows you to capture specific cough samples.\n"
+                                "💡 All recordings are saved and can be uploaded when online.",
+                           font=font.Font(self.window, family="Liberation Mono", size=9, weight="bold"), 
+                           justify=tk.LEFT, wraplength=470)
+        info_text.pack()
+
+    def create_info_page(self):
+        """Create the home page with device status and instructions"""
+        self.info_frame = tk.Frame(self.main_frame)
+
+        # Status Bar
+        self.info_status_widgets = self.create_status_bar(self.info_frame)
+
+        # Separator
+        separator = ttk.Separator(self.info_frame, orient='horizontal')
+        separator.pack(fill=tk.X, pady=2)
+
+        # Title
+        title_label = tk.Label(self.info_frame, text="🫁 TB Care Device", font=self.title_font)
+        title_label.pack(pady=10)
+        
+        # Status Frame
+        status_frame = tk.Frame(self.info_frame)
+        status_frame.pack(pady=10)
+        
+        # Device Status
+        device_status_frame = tk.Frame(status_frame)
+        device_status_frame.pack(fill=tk.X, pady=5)
+        
+        # IP Status
+        ip_frame = tk.Frame(device_status_frame)
+        ip_frame.pack(fill=tk.X, pady=2)
+        ip_label = tk.Label(ip_frame, text="🌐 IP Address:", font=self.wndfont)
+        ip_label.pack(side=tk.LEFT)
+        self.home_ip_label = tk.Label(ip_frame, textvariable=self.EdgeIP, font=self.wndfont)
+        self.home_ip_label.pack(side=tk.LEFT, padx=(10, 0))
+        
+        # Internet Status
+        internet_frame = tk.Frame(device_status_frame)
+        internet_frame.pack(fill=tk.X, pady=2)
+        internet_label = tk.Label(internet_frame, text="🌍 Internet:", font=self.wndfont)
+        internet_label.pack(side=tk.LEFT)
+        self.home_internet_label = tk.Label(internet_frame, textvariable=self.internet_status, font=self.wndfont)
+        self.home_internet_label.pack(side=tk.LEFT, padx=(10, 0))
+        
+        # Cough Count
+        cough_frame = tk.Frame(device_status_frame)
+        cough_frame.pack(fill=tk.X, pady=2)
+        cough_label = tk.Label(cough_frame, text="🔢 Cough Count:", font=self.wndfont)
+        cough_label.pack(side=tk.LEFT)
+        self.home_cough_label = tk.Label(cough_frame, textvariable=self.solicoughcount, font=self.wndfont)
+        self.home_cough_label.pack(side=tk.LEFT, padx=(10, 0))
+        
+        # Recording Status
+        record_frame = tk.Frame(device_status_frame)
+        record_frame.pack(fill=tk.X, pady=2)
+        record_label = tk.Label(record_frame, text="🎙️ Status:", font=self.wndfont)
+        record_label.pack(side=tk.LEFT)
+        self.home_record_label = tk.Label(record_frame, textvariable=self.txtrecord, font=self.wndfont)
+        self.home_record_label.pack(side=tk.LEFT, padx=(10, 0))
+        
+        # Instructions Frame
+        instructions_frame = tk.Frame(self.info_frame)
+        instructions_frame.pack(pady=20, padx=20, fill=tk.BOTH, expand=True)
+        
+        instructions_title = tk.Label(instructions_frame, text="📋 Device Instructions", font=self.title_font)
+        instructions_title.pack(pady=(0, 10))
+        
+        # Button Instructions
+        btn_frame = tk.Frame(instructions_frame)
+        btn_frame.pack(fill=tk.X)
+        
+        # Button 1 instruction
+        btn1_frame = tk.Frame(btn_frame)
+        btn1_frame.pack(fill=tk.X, pady=3)
+        btn1_label = tk.Label(btn1_frame, text="🔴 Button 1:", font=self.wndfont)
+        btn1_label.pack(side=tk.LEFT)
+        btn1_desc = tk.Label(btn1_frame, text="Active & Passive Recording Page", font=self.wndfont)
+        btn1_desc.pack(side=tk.LEFT, padx=(10, 0))
+        
+        # Button 2 instruction
+        btn2_frame = tk.Frame(btn_frame)
+        btn2_frame.pack(fill=tk.X, pady=3)
+        btn2_label = tk.Label(btn2_frame, text="🟡 Button 2:", font=self.wndfont)
+        btn2_label.pack(side=tk.LEFT)
+        btn2_desc = tk.Label(btn2_frame, text="Instant Cough Prediction Page", font=self.wndfont)
+        btn2_desc.pack(side=tk.LEFT, padx=(10, 0))
+        
+        # Button 3 instruction
+        btn3_frame = tk.Frame(btn_frame)
+        btn3_frame.pack(fill=tk.X, pady=3)
+        btn3_label = tk.Label(btn3_frame, text="🔵 Button 3:", font=self.wndfont)
+        btn3_label.pack(side=tk.LEFT)
+        btn3_desc = tk.Label(btn3_frame, text="Information Page", font=self.wndfont)
+        btn3_desc.pack(side=tk.LEFT, padx=(10, 0))
+        
+        # Additional info
+        info_frame = tk.Frame(instructions_frame)
+        info_frame.pack(fill=tk.X, pady=10)
+        
+        info_text = tk.Label(info_frame, 
+                           text="💡 The device automatically detects and records cough sounds.\n"
+                                "Manual recording allows you to capture specific cough samples.\n"
+                                "All recordings are saved and can be uploaded when online.",
+                           font=self.wndfont, justify=tk.LEFT, wraplength=400)
+        info_text.pack()
+        
+        # Navigation buttons
+        nav_frame = tk.Frame(self.info_frame)
+        nav_frame.pack(side=tk.BOTTOM, pady=10)
+        
+        analyzer_btn = tk.Button(nav_frame, text="📊 Go to Analyzer", 
+                               command=lambda: self.show_page(2), font=self.wndfont)
+        analyzer_btn.pack()
+
+    def create_analyzer_page(self):
+        """Create the analyzer page (original functionality)"""
+        self.analyzer_frame = tk.Frame(self.main_frame)
+
+        # Status Bar
+        self.analyzer_status_widgets = self.create_status_bar(self.analyzer_frame)
+
+        # Separator
+        separator = ttk.Separator(self.analyzer_frame, orient='horizontal')
+        separator.pack(fill=tk.X, pady=2)
+
+        # Title
+        title_label = tk.Label(self.analyzer_frame, text="🎤︎︎ Active & Passive Recording", font=self.title_font)
+        title_label.pack(pady=5)
+        
         # Info Frame
-        self.infofrm = tk.Frame(self.window)
+        self.infofrm = tk.Frame(self.analyzer_frame)
 
         # Create a sub-frame for IP and Internet status to be side by side
         self.ip_internet_frame = tk.Frame(self.infofrm)
 
         # Internet Connection
-        self.internet_status = tk.StringVar()
-        self.internet_status.set("Offline")
         self.lb_internet = tk.Label(self.ip_internet_frame, textvariable=self.internet_status)
-        self.lb_internet.config(font=wndfont)
-        self.lb_internet.pack(side=tk.RIGHT, padx=(10, 0))  # Add some padding between them
-        thd_ip = Thread(target=self.getinternetstatsprocess).start()
+        self.lb_internet.config(font=self.wndfont)
+        self.lb_internet.pack(side=tk.LEFT, padx=(10, 0))
 
-        # Status Connection
-        self.EdgeIP = tk.StringVar()
-        self.EdgeIP.set(self.getwlanip())
+        # Status Connection 
         self.sttconn = tk.Label(self.ip_internet_frame, textvariable=self.EdgeIP)
-        self.sttconn.config(font=wndfont)
-        self.sttconn.pack(side=tk.LEFT)
-        thd_ip = Thread(target=self.getipprocess).start()
+        self.sttconn.config(font=self.wndfont)
+        self.sttconn.pack(side=tk.RIGHT)
 
         # Pack the IP/Internet frame
-        self.ip_internet_frame.pack(side=tk.BOTTOM)
+        self.ip_internet_frame.pack(side=tk.TOP)
 
         # Solic Coughs Status
-        self.solicoughcount = tk.StringVar()
-        self.solicoughcount.set("Longi: 0 || Solic: 0")
         self.lb_coughso = tk.Label(self.infofrm, textvariable=self.solicoughcount)
-        self.lb_coughso.config(font=wndfont)
-        self.lb_coughso.pack(side=tk.BOTTOM)
-
-        # Auto Coughs Status
-        # self.autocoughcount = tk.StringVar()
-        # self.autocoughcount.set("Auto Coughs: 0")
-        # self.lb_cougha = tk.Label(self.infofrm, textvariable=self.autocoughcount)
-        # self.lb_cougha.config(font=wndfont)
-        # self.lb_cougha.pack(side=tk.BOTTOM)
-
-        thd_coughCount = Thread(target=self.getCoughCount).start()
+        self.lb_coughso.config(font=self.wndfont)
+        self.lb_coughso.pack(side=tk.TOP)
 
         # Recording Status
-        self.txtrecord = tk.StringVar()
-        self.txtrecord.set("Recording: Automatic")
         self.sttrecord = tk.Label(self.infofrm, textvariable=self.txtrecord)
-        self.sttrecord.config(font=wndfont)
-        self.sttrecord.pack(side=tk.BOTTOM)
+        self.sttrecord.config(font=self.wndfont)
+        self.sttrecord.pack(side=tk.TOP)
 
         # Pack Info Frame
         self.infofrm.pack(side=tk.TOP)
 
         # Graph Frame
-        self.graphfrm = tk.Frame()
+        self.graphfrm = tk.Frame(self.analyzer_frame)
         # Example Figure Plot
         self.fig = Figure(figsize=(5, 1), dpi=96, facecolor='black')
         self.ax = self.fig.add_subplot(111)
         self.ax.set_facecolor('black')
-        #self.ax.grid(True, which='both', ls='-', color='#333333')
         self.ax.set_ylim(-1, 1)
         self.ax.set_xlim(-1, 1)
         self.patch_plot = self.ax.add_patch(patches.Rectangle((-1.0, 0.0), 2.0, 1.0, linewidth=1, edgecolor='black', facecolor='blue'))
@@ -157,7 +408,7 @@ class CoughTk():
         self.graphfrm.pack(side=tk.BOTTOM)
 
         # Graph Data
-        self.graphfrm2 = tk.Frame()
+        self.graphfrm2 = tk.Frame(self.analyzer_frame)
         self.waveform_duration = 2.0  # 2 seconds
         self.waveform_length = 200   # Display points (downsampled)
         self.waveform_samples = int(self.waveform_duration * self.SAMPLE_RATE)  # Total samples for 2 seconds
@@ -186,46 +437,237 @@ class CoughTk():
         self.downsample_counter = 0
         self.downsample_accumulator = 0.0
 
-        # Dark Theme Config
-        if self.DarkTheme:
-            self.window.config(bg="black")
-            #self.lbltitle.config(bg='black', fg='white')
-            self.sttrecord.config(bg='black', fg='white')
-            #self.lb_cougha.config(bg='black', fg='white')
-            self.lb_coughso.config(bg='black', fg='white')
-            self.sttconn.config(bg='black', fg='white')
-            self.lb_internet.config(bg='black', fg='white')
-            self.infofrm.config(bg='black')
-            self.ip_internet_frame.config(bg='black')
-            self.graphfrm.config(bg='black')
-            self.graphfrm2.config(bg='black')
+    def create_prediction_page(self):
+        """Create the prediction page with cough TB classification"""
+        self.prediction_frame = tk.Frame(self.main_frame)
 
-        # === Shared buffer ===
-        self.audio_buffer = deque()
-        self.buffer_lock = Lock()
-        self.next_time = time.time()
-        self.RECORD_FLAG = False
-        self.last_cough_np = np.zeros((1000,))
-        self.recording_start_time = None
-        self.recording_time_thread = None
-        self.recording_time_stop_event = threading.Event()
+        # Status Bar
+        self.prediction_status_widgets = self.create_status_bar(self.prediction_frame)
 
-        self.buffer_size = int(self.STEP_DURATION * self.SAMPLE_RATE)
-        self.window_size = int(self.WINDOW_DURATION * self.SAMPLE_RATE)
+        # Separator
+        separator = ttk.Separator(self.prediction_frame, orient='horizontal')
+        separator.pack(fill=tk.X, pady=2)
 
-        # # start graph animation
-        self.ani = animation.FuncAnimation(self.fig2, self.graphupdate, interval=200, blit=False)
-
-        self.pcm = alsa.PCM(alsa.PCM_CAPTURE, alsa.PCM_NORMAL,
-                       channels=self.CHANNELS, rate=self.SAMPLE_RATE, format=alsa.PCM_FORMAT_S16_LE,
-                       periodsize=self.PERIOD_SIZE, device=self.DEVICE_SOUND)
+        # Title
+        title_label = tk.Label(self.prediction_frame, text="🔬 Cough TB Prediction", font=self.title_font)
+        title_label.pack(pady=5)
         
-        Thread(target=self.record_audio_loop).start()
-        #Thread(target=self.sendcoughdataprocess).start()
-        # Thread(target=self.sendstatusdeviceAPIprocess).start()
+        # Info Frame
+        self.pred_infofrm = tk.Frame(self.prediction_frame)
 
-        # Main Loop
-        self.window.mainloop()
+        # Recording Status
+        self.pred_sttrecord = tk.Label(self.pred_infofrm, textvariable=self.txtrecord)
+        self.pred_sttrecord.config(font=self.wndfont)
+        self.pred_sttrecord.pack(side=tk.TOP)
+
+        # Create a sub-frame for IP and Internet status to be side by side
+        self.pred_ip_internet_frame = tk.Frame(self.pred_infofrm)
+
+        # Status Connection
+        self.pred_sttconn = tk.Label(self.pred_ip_internet_frame, textvariable=self.EdgeIP)
+        self.pred_sttconn.config(font=self.wndfont)
+        self.pred_sttconn.pack(side=tk.RIGHT)
+
+        # Internet Connection
+        self.pred_lb_internet = tk.Label(self.pred_ip_internet_frame, textvariable=self.internet_status)
+        self.pred_lb_internet.config(font=self.wndfont)
+        self.pred_lb_internet.pack(side=tk.LEFT, padx=(10, 0))
+
+        # Pack the IP/Internet frame
+        self.pred_ip_internet_frame.pack(side=tk.TOP)
+
+        # Pack Info Frame
+        self.pred_infofrm.pack(side=tk.TOP)
+
+        # Prediction Results Frame
+        prediction_frame = tk.Frame(self.prediction_frame)
+        prediction_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        # Results Title
+        # results_title = tk.Label(prediction_frame, text="📊 Prediction Results", font=self.subtitle_font)
+        # results_title.pack(pady=(0, 15))
+        
+        # Two column frame for predictions
+        columns_frame = tk.Frame(prediction_frame)
+        columns_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Left Column - Non TB
+        left_frame = tk.Frame(columns_frame)
+        left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
+        
+        # Non TB Label
+        non_tb_label = tk.Label(left_frame, text="✅ Non TB", font=self.subtitle_font, fg="green")
+        non_tb_label.pack(pady=5)
+        
+        # Non TB Percentage
+        self.non_tb_percentage = tk.StringVar()
+        self.non_tb_percentage.set("0%")
+        non_tb_percent_label = tk.Label(left_frame, textvariable=self.non_tb_percentage, 
+                                    font=font.Font(self.window, family="Liberation Mono", size=18, weight="bold"))
+        non_tb_percent_label.pack(pady=10)
+        
+        # Non TB Progress Bar
+        self.non_tb_progress = ttk.Progressbar(left_frame, length=150, mode='determinate')
+        self.non_tb_progress.pack(pady=5)
+        
+        # Right Column - TB
+        right_frame = tk.Frame(columns_frame)
+        right_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(10, 0))
+        
+        # TB Label
+        tb_label = tk.Label(right_frame, text="⚠️ TB", font=self.title_font, fg="red")
+        tb_label.pack(pady=5)
+        
+        # TB Percentage
+        self.tb_percentage = tk.StringVar()
+        self.tb_percentage.set("0%")
+        tb_percent_label = tk.Label(right_frame, textvariable=self.tb_percentage,
+                                font=font.Font(self.window, family="Liberation Mono", size=18, weight="bold"))
+        tb_percent_label.pack(pady=10)
+        
+        # TB Progress Bar
+        self.tb_progress = ttk.Progressbar(right_frame, length=150, mode='determinate')
+        self.tb_progress.pack(pady=5)
+        
+        # Bottom Status Label
+        self.prediction_status = tk.StringVar()
+        self.prediction_status.set("🎤 Waiting for cough sample...")
+        status_label = tk.Label(prediction_frame, textvariable=self.prediction_status, font=self.wndfont)
+        status_label.pack(pady=15)
+        
+        # Manual Prediction Button
+        predict_btn = tk.Button(prediction_frame, text="🔍 Analyze Last Cough", 
+                            command=self.manual_prediction, font=self.wndfont)
+        predict_btn.pack(pady=10)
+
+    def manual_prediction(self):
+        """Manually trigger prediction on the last recorded cough"""
+        self.prediction_status.set("🔄 Analyzing cough sample...")
+        
+        # Simulate prediction (replace with actual ML model)
+        import random
+        tb_prob = random.uniform(0, 100)
+        non_tb_prob = 100 - tb_prob
+        
+        # Update percentages
+        self.tb_percentage.set(f"{tb_prob:.1f}%")
+        self.non_tb_percentage.set(f"{non_tb_prob:.1f}%")
+        
+        # Update progress bars
+        self.tb_progress['value'] = tb_prob
+        self.non_tb_progress['value'] = non_tb_prob
+        
+        # Update status
+        if tb_prob > 50:
+            self.prediction_status.set("⚠️ High TB probability detected!")
+        else:
+            self.prediction_status.set("✅ Low TB probability - likely healthy cough")
+
+    def show_page(self, page_num):
+        """Switch between pages"""
+        if page_num == 1:
+            self.analyzer_frame.pack_forget()
+            self.prediction_frame.pack_forget()
+            self.info_frame.pack_forget()
+            self.home_frame.pack(fill=tk.BOTH, expand=True)
+            self.current_page = 1
+        elif page_num == 2:
+            self.home_frame.pack_forget()
+            self.prediction_frame.pack_forget()
+            self.info_frame.pack_forget()
+            self.analyzer_frame.pack(fill=tk.BOTH, expand=True)
+            self.current_page = 2
+            # Start animation only when on analyzer page
+            if not hasattr(self, 'ani'):
+                self.ani = animation.FuncAnimation(self.fig2, self.graphupdate, interval=200, blit=False)
+        elif page_num == 3:
+            self.home_frame.pack_forget()
+            self.analyzer_frame.pack_forget()
+            self.info_frame.pack_forget()
+            self.prediction_frame.pack(fill=tk.BOTH, expand=True)
+            self.current_page = 3
+            self.txtrecord.set("Ready to Record")
+            self.manual_prediction()
+        elif page_num == 4:
+            self.home_frame.pack_forget()
+            self.analyzer_frame.pack_forget()
+            self.prediction_frame.pack_forget()
+            self.info_frame.pack(fill=tk.BOTH, expand=True)
+            self.current_page = 4
+
+    def configure_dark_theme(self):
+        """Configure dark theme for all elements"""
+        # Main window
+        self.window.config(bg="black")
+        self.main_frame.config(bg="black")
+
+        # Configure status bars
+        if hasattr(self, 'home_status_widgets'):
+            for widget in self.home_status_widgets:
+                widget.config(bg='black', fg='white')
+
+        if hasattr(self, 'info_status_widgets'):
+            for widget in self.info_status_widgets:
+                widget.config(bg='black', fg='white')
+                
+        if hasattr(self, 'analyzer_status_widgets'):
+            for widget in self.analyzer_status_widgets:
+                widget.config(bg='black', fg='white')
+                
+        if hasattr(self, 'prediction_status_widgets'):
+            for widget in self.prediction_status_widgets:
+                widget.config(bg='black', fg='white')
+
+        # Home page elements
+        self.home_frame.config(bg="black")
+        for widget in self.home_frame.winfo_children():
+            self.configure_widget_dark_theme(widget)
+        
+        # Home page elements
+        self.analyzer_frame.config(bg="black")
+        for widget in self.analyzer_frame.winfo_children():
+            self.configure_widget_dark_theme(widget)
+
+        # Analyzer page elements
+        self.analyzer_frame.config(bg="black")
+        self.sttrecord.config(bg='black', fg='white')
+        self.lb_coughso.config(bg='black', fg='white')
+        self.sttconn.config(bg='black', fg='white')
+        self.lb_internet.config(bg='black', fg='white')
+        self.infofrm.config(bg='black')
+        self.ip_internet_frame.config(bg='black')
+        self.graphfrm.config(bg='black')
+        self.graphfrm2.config(bg='black')
+
+        # Home page elements
+        self.prediction_frame.config(bg="black")
+        for widget in self.prediction_frame.winfo_children():
+            self.configure_widget_dark_theme(widget)
+
+    def configure_widget_dark_theme(self, widget):
+        """Recursively configure dark theme for widgets"""
+        try:
+            widget_class = widget.winfo_class()
+            if widget_class in ['Frame', 'Label', 'Button']:
+                widget.config(bg='black')
+                if widget_class in ['Label', 'Button']:
+                    widget.config(fg='white')
+            
+            # Recursively apply to children
+            for child in widget.winfo_children():
+                self.configure_widget_dark_theme(child)
+        except Exception as e:
+            # Some widgets might not support these config options
+            pass
+
+    def start_background_processes(self):
+        """Start all background processes"""
+        Thread(target=self.getinternetstatsprocess, daemon=True).start()
+        Thread(target=self.getipprocess, daemon=True).start()
+        Thread(target=self.getCoughCount, daemon=True).start()
+        Thread(target=self.button_navigation_loop, daemon=True).start()
+        Thread(target=self.record_audio_loop, daemon=True).start()
+            
 
     def getwlanip(self):
         # wlp3s0 wlan0
@@ -239,17 +681,70 @@ class CoughTk():
             ipstring = self.getwlanip()
             if ipstring == "":
                 "0.0.0.0"
-            self.EdgeIP.set(ipstring)
+            self.EdgeIP.set("📡" + ipstring)
             time.sleep(10)
+
+    def button_navigation_loop(self):
+        """Handle button navigation between pages"""
+        btn1_last_state = '1'
+        btn2_last_state = '1'
+        btn3_last_state = '1'
+        btn4_last_state = '1'
+        while True:
+            try:
+                with open(self.BTN1_FILE, "r") as f:
+                    btn1_current = f.read().strip()
+                with open(self.BTN2_FILE, "r") as f:
+                    btn2_current = f.read().strip()
+                with open(self.BTN3_FILE, "r") as f:
+                    btn3_current = f.read().strip()
+                with open(self.BTN4_FILE, "r") as f:
+                    btn4_current = f.read().strip()
+                
+                # Button 1 Navigation Logic
+                if btn1_current == '0' and btn1_last_state == '1':
+                    if self.current_page == 1:
+                        self.show_page(2)
+                    with open(self.BTN1_FILE, "w") as f:
+                        f.write('1')
+                        
+                # Button 2 Navigation Logic
+                if btn2_current == '0' and btn2_last_state == '1':
+                    if self.current_page == 1:
+                        self.show_page(3)
+                    with open(self.BTN2_FILE, "w") as f:
+                        f.write('1')
+                
+                # Button 3 Navigation Logic
+                if btn3_current == '0' and btn3_last_state == '1':
+                    if self.current_page == 1:
+                        self.show_page(4)
+                    with open(self.BTN3_FILE, "w") as f:
+                        f.write('1')
+                
+                # Button 4 Navigation Logic
+                if btn4_current == '0' and btn4_last_state == '1':
+                    if self.current_page in [2, 3, 4]:
+                        self.show_page(1)
+                    with open(self.BTN4_FILE, "w") as f:
+                        f.write('1')
+
+                btn1_last_state = btn1_current
+                btn2_last_state = btn2_current
+                btn3_last_state = btn3_current
+                btn4_last_state = btn4_current
+            except Exception as e:
+                logging.error(f"[ERROR] Button navigation error: {e}")
+            time.sleep(0.1)
 
     def getinternetstatsprocess(self, host="8.8.8.8", port=53, timeout=3):
         while True:
             try:
                 socket.setdefaulttimeout(timeout)
                 socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect((host, port))
-                self.internet_status.set("Online")
+                self.internet_status.set("🌍On |")
             except socket.error:
-                self.internet_status.set("Offline")
+                self.internet_status.set("📵Off |")
 
             time.sleep(5)
 
@@ -268,8 +763,8 @@ class CoughTk():
 
     #         response = requests.post(f"{self.SERVER_DOMAIN}/api/device_status", 
     #                         data={'device_id': self.DEVICE_ID, 'autocoughcount': autocoughcount, 'solicoughcount': solicoughcount})
-            
     #         time.sleep(3)
+
     def start_recording_time_update(self):
         self.recording_time_stop_event.clear()
         self.recording_time_thread = threading.Thread(target=self.update_recording_time_loop, daemon=True)
@@ -312,101 +807,103 @@ class CoughTk():
 
     def record_audio_loop(self):
         while True:
-            length, data = self.pcm.read()
-            if length > 0:
-                audio_data = np.frombuffer(data, dtype=np.int16)
-                audio_data = audio_data.reshape(-1, self.CHANNELS)
-                mono = np.mean(audio_data, axis=1).astype(np.float32) / 32768.0
-                
-                if np.all(mono == 0):
-                    self.patch_plot.set_facecolor('red')
-                    self.do_updatefigure(ignore_cooldown=True)
-                    time.sleep(0.01)
-                    continue
+            if self.current_page == 2 or self.current_page == 3:
+                length, data = self.pcm.read()
+                if length > 0:
+                    audio_data = np.frombuffer(data, dtype=np.int16)
+                    audio_data = audio_data.reshape(-1, self.CHANNELS)
+                    mono = np.mean(audio_data, axis=1).astype(np.float32) / 32768.0
                     
-                if self.RECORD_FLAG:
-                    with self.buffer_lock:
-                        self.audio_buffer.extend(mono)
-                        if self.RECORD_LENGTH > 1000:
-                            should_stop = len(self.audio_buffer) >= self.RECORD_LENGTH
-                        else:
-                            with open(self.REC_STOP_FILE, "r") as stt:
-                                RecSttop = stt.read().strip()
-                            should_stop = RecSttop == '0'
-                            if should_stop:
-                                with open(self.REC_IND_FILE, "w") as out:
-                                    out.write('1')
-                                    
-                        if self.recording_start_time and not self.recording_time_thread:
-                            self.start_recording_time_update()
-                            
-                        if should_stop:
-                            data_np = np.array(self.audio_buffer, dtype=np.float32)
-                            self.RECORD_FLAG = False
-                            self.recording_start_time = None
-
-                            logging.info(f"[DEBUG] Recording stopped. Buffer length: {len(self.audio_buffer)}, RECORD_LENGTH: {self.RECORD_LENGTH}")
-
-                            self.txtrecord.set("Recording: Automatic")
-                            self.patch_plot.set_facecolor('blue')
-                            self.do_updatefigure(ignore_cooldown=True)
-
-                            t = Thread(target=self.handle_record_soli, args=(data_np.copy(),))
-                            t.start()
-                            self.next_time = time.time()
-                            self.audio_buffer.clear()
-                else:
-                    for sample in mono:
-                        self.audio_accumulator.append(sample)
-                        self.downsample_accumulator += sample
-                        self.downsample_counter += 1
-                        if self.downsample_counter >= self.downsample_ratio:
-                            avg_sample = self.downsample_accumulator / self.downsample_counter
-                            self.Y_buffer.append(avg_sample)
-                            self.downsample_counter = 0
-                            self.downsample_accumulator = 0.0
-
-                    with open(self.REC_IND_FILE, "r") as stt:
-                        RecStt = stt.read().strip()
-
-                    if RecStt == '0':
-                        logging.info("Button press detected, starting manual recording")
-                        with open(self.REC_IND_FILE, "w") as out:
-                            out.write('1')
-                        self.audio_buffer.clear()
-                        self.RECORD_FLAG = True
-                        self.recording_start_time = time.time()
-                        self.start_recording_time_update()
-
-                        logging.info(f"[DEBUG] Recording started. Buffer cleared. RECORD_FLAG: {self.RECORD_FLAG}")
-
-                        self.txtrecord.set("Recording: 00:00:00")
-                        self.patch_plot.set_facecolor('yellow')
+                    if np.all(mono == 0):
+                        self.patch_plot.set_facecolor('red')
                         self.do_updatefigure(ignore_cooldown=True)
-                    else:
+                        time.sleep(0.01)
+                        continue
+                        
+                    if self.RECORD_FLAG:
                         with self.buffer_lock:
                             self.audio_buffer.extend(mono)
-                            while len(self.audio_buffer) > self.window_size:
-                                self.audio_buffer.popleft()
-
-                        current_gaptime = time.time() - self.next_time
-                        if len(self.audio_buffer) >= self.window_size and current_gaptime >= self.STEP_DURATION:
-                            with self.buffer_lock:
+                            if self.RECORD_LENGTH > 1000:
+                                should_stop = len(self.audio_buffer) >= self.RECORD_LENGTH
+                            else:
+                                with open(self.BTN2_FILE, "r") as stt:
+                                    RecSttop = stt.read().strip()
+                                should_stop = RecSttop == '0'
+                                if should_stop:
+                                    with open(self.BTN2_FILE, "w") as out:
+                                        out.write('1')
+                                        
+                            if self.recording_start_time and not self.recording_time_thread:
+                                self.start_recording_time_update()
+                                
+                            if should_stop:
                                 data_np = np.array(self.audio_buffer, dtype=np.float32)
-    
-                            self.next_time += self.STEP_DURATION #= time.time()
+                                self.RECORD_FLAG = False
+                                self.recording_start_time = None
 
-                            self.patch_plot.set_facecolor('blue')
-                            self.do_updatefigure()
+                                logging.info(f"[DEBUG] Recording stopped. Buffer length: {len(self.audio_buffer)}, RECORD_LENGTH: {self.RECORD_LENGTH}")
 
-                            t = Thread(target=self.handle_record_auto,
-                                       args=(data_np.copy(),))
-                            t.start()
-                            
+                                self.txtrecord.set("Recording: Automatic")
+                                self.patch_plot.set_facecolor('blue')
+                                self.do_updatefigure(ignore_cooldown=True)
 
-                time.sleep(0.01)
-            else:
-                time.sleep(0.01)
+                                t = Thread(target=self.handle_record_soli, args=(data_np.copy(),))
+                                t.start()
+                                self.next_time = time.time()
+                                self.audio_buffer.clear()
+                    else:
+                        for sample in mono:
+                            self.audio_accumulator.append(sample)
+                            self.downsample_accumulator += sample
+                            self.downsample_counter += 1
+                            if self.downsample_counter >= self.downsample_ratio:
+                                avg_sample = self.downsample_accumulator / self.downsample_counter
+                                self.Y_buffer.append(avg_sample)
+                                self.downsample_counter = 0
+                                self.downsample_accumulator = 0.0
+
+                        with open(self.BTN1_FILE, "r") as stt:
+                            RecStt = stt.read().strip()
+
+                        if RecStt == '0':
+                            logging.info("Button press detected, starting manual recording")
+                            with open(self.BTN1_FILE, "w") as out:
+                                out.write('1')
+                            self.audio_buffer.clear()
+                            self.RECORD_FLAG = True
+                            self.recording_start_time = time.time()
+                            self.start_recording_time_update()
+
+                            logging.info(f"[DEBUG] Recording started. Buffer cleared. RECORD_FLAG: {self.RECORD_FLAG}")
+
+                            self.txtrecord.set("Recording: 00:00:00")
+                            self.patch_plot.set_facecolor('yellow')
+                            self.do_updatefigure(ignore_cooldown=True)
+                        else:
+                            if self.current_page == 2:
+                                with self.buffer_lock:
+                                    self.audio_buffer.extend(mono)
+                                    while len(self.audio_buffer) > self.window_size:
+                                        self.audio_buffer.popleft()
+
+                                current_gaptime = time.time() - self.next_time
+                                if len(self.audio_buffer) >= self.window_size and current_gaptime >= self.STEP_DURATION:
+                                    with self.buffer_lock:
+                                        data_np = np.array(self.audio_buffer, dtype=np.float32)
+            
+                                    self.next_time += self.STEP_DURATION #= time.time()
+
+                                    self.patch_plot.set_facecolor('blue')
+                                    self.do_updatefigure()
+
+                                    t = Thread(target=self.handle_record_auto,
+                                            args=(data_np.copy(),))
+                                    t.start()
+                                
+
+                    time.sleep(0.01)
+                else:
+                    time.sleep(0.01)
 
     def handle_record_auto(self, audio_np):
         audio_np = audio_np[self.AUDIO_POINT_START:]
