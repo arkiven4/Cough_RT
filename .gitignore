@@ -3,3 +3,7 @@ logs
 __pycache__
 model.onnx
 tempp_update.py
+gpio5
+gpio6
+gpio7
+gpio8
