@@ -17,6 +17,12 @@ import alsaaudio as alsa
 import soundfile as sf
 import tempfile
 
+import asyncio
+import json
+import requests
+import websockets
+import io
+
 # Import matplotlib libraries
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationToolbar2Tk)
 import matplotlib.animation as animation
@@ -78,6 +84,7 @@ class CoughTk():
     DEVICE_WLAN = GLOBAL_CONFIG.DEVICE_WLAN
     WEBPANEL_ROOT = GLOBAL_CONFIG.WEBPANEL_ROOT
     SERVER_DOMAIN = GLOBAL_CONFIG.SERVER_DOMAIN
+    SERVERWS_DOMAIN = GLOBAL_CONFIG.SERVERWS_DOMAIN
     DEVICE_ID = GLOBAL_CONFIG.DEVICE_ID
 
     def __init__(self):
@@ -87,7 +94,7 @@ class CoughTk():
         self.window = tk.Tk()
         self.window.geometry("480x320")
         self.window.title("TBCare - CoughAnalyzer")
-        self.current_page = 1
+        self.current_page = 3
 
         self.main_frame = tk.Frame(self.window)
         self.main_frame.pack(fill=tk.BOTH, expand=True)
@@ -399,64 +406,62 @@ class CoughTk():
 
         # Prediction Results Frame
         prediction_frame = tk.Frame(self.prediction_frame)
-        prediction_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-        
-        # Results Title
-        # results_title = tk.Label(prediction_frame, text="📊 Prediction Results", font=self.subtitle_font)
-        # results_title.pack(pady=(0, 15))
+        prediction_frame.pack(side=tk.TOP, fill=tk.X, expand=True, padx=1, pady=1)
         
         # Two column frame for predictions
         columns_frame = tk.Frame(prediction_frame)
-        columns_frame.pack(fill=tk.BOTH, expand=True)
+        columns_frame.pack(fill=tk.BOTH, expand=True, pady=15)
         
         # Left Column - Non TB
         left_frame = tk.Frame(columns_frame)
         left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
         
-        # Non TB Label
-        non_tb_label = tk.Label(left_frame, text="✅ Non TB", font=self.subtitle_font, fg="green")
-        non_tb_label.pack(pady=5)
+        # Non TB Label - Fixed height
+        non_tb_label = tk.Label(left_frame, text="✅ Non-TB", font=self.subtitle_font, fg="green", height=1)
+        non_tb_label.pack(pady=3)
         
-        # Non TB Percentage
+        # Non TB Percentage - Fixed height  
         self.non_tb_percentage = tk.StringVar()
         self.non_tb_percentage.set("0%")
         non_tb_percent_label = tk.Label(left_frame, textvariable=self.non_tb_percentage, 
-                                    font=font.Font(self.window, family="Liberation Mono", size=18, weight="bold"))
-        non_tb_percent_label.pack(pady=10)
+                                    font=font.Font(self.window, family="Liberation Mono", size=18, weight="bold"),
+                                    height=2)
+        non_tb_percent_label.pack(pady=1)
         
         # Non TB Progress Bar
         self.non_tb_progress = ttk.Progressbar(left_frame, length=150, mode='determinate')
-        self.non_tb_progress.pack(pady=5)
-        
+        self.non_tb_progress.pack(pady=1)
+
         # Right Column - TB
         right_frame = tk.Frame(columns_frame)
         right_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(10, 0))
         
-        # TB Label
-        tb_label = tk.Label(right_frame, text="⚠️ TB", font=self.title_font, fg="red")
-        tb_label.pack(pady=5)
+        # TB Label - Fixed height (same as Non-TB)
+        tb_label = tk.Label(right_frame, text="⚠️ Tuberculosis", font=self.subtitle_font, fg="red", height=1)
+        tb_label.pack(pady=3)
         
-        # TB Percentage
+        # TB Percentage - Fixed height
         self.tb_percentage = tk.StringVar()
         self.tb_percentage.set("0%")
         tb_percent_label = tk.Label(right_frame, textvariable=self.tb_percentage,
-                                font=font.Font(self.window, family="Liberation Mono", size=18, weight="bold"))
-        tb_percent_label.pack(pady=10)
+                                font=font.Font(self.window, family="Liberation Mono", size=18, weight="bold"),
+                                height=2)
+        tb_percent_label.pack(pady=1)
         
         # TB Progress Bar
         self.tb_progress = ttk.Progressbar(right_frame, length=150, mode='determinate')
-        self.tb_progress.pack(pady=5)
+        self.tb_progress.pack(pady=1)
         
         # Bottom Status Label
         self.prediction_status = tk.StringVar()
         self.prediction_status.set("🎤 Waiting for cough sample...")
         status_label = tk.Label(prediction_frame, textvariable=self.prediction_status, font=self.wndfont)
-        status_label.pack(pady=15)
-        
-        # Manual Prediction Button
-        predict_btn = tk.Button(prediction_frame, text="🔍 Analyze Last Cough", 
-                            command=self.manual_prediction, font=self.wndfont)
-        predict_btn.pack(pady=10)
+        status_label.pack(pady=1)
+
+        # Processing Progress Bar (hidden by default)
+        self.processing_progress = ttk.Progressbar(prediction_frame, length=300, mode='determinate')
+        self.processing_progress.pack(pady=5)
+        self.processing_progress.pack_forget()
 
     def manual_prediction(self):
         """Manually trigger prediction on the last recorded cough"""
@@ -864,7 +869,7 @@ class CoughTk():
         th_h_multiplier = cough_config.get('th_h_multiplier', 1)
         adaptive_method = cough_config.get('adaptive_method', 'default')
     
-        coughSegments, cough_mask = segment_cough(audio_np, self.SAMPLE_RATE, 
+        coughSegments, _ = segment_cough(audio_np, self.SAMPLE_RATE, 
                                                 cough_padding=cough_padding, 
                                                 min_cough_len=min_cough_len,
                                                 th_l_multiplier=th_l_multiplier, 
@@ -927,11 +932,80 @@ class CoughTk():
                 self.append_to_lastsend_json("last_send_soliced", rel_path)
             except Exception as e:
                 logging.error(f"[ERROR] Failed to save solicited recording: {e}")
+
         elif self.current_page == 3:
             self.txtrecord.set("Waiting For Prediction to complete....")
-            self.manual_prediction()
-            self.txtrecord.set("Ready to Record")
+            self.prediction_status.set("Uploading Cough Samples...")
+            self.processing_progress.pack(pady=5)
+            self.processing_progress['value'] = 10
 
+            audio_np = audio_np[self.AUDIO_POINT_START:]
+            buffer = io.BytesIO()
+            sf.write(buffer, audio_np, self.SAMPLE_RATE, format='WAV', subtype='PCM_24')
+            buffer.seek(0)
+            
+            response = requests.post(
+                f"{self.SERVER_DOMAIN}:5765/submit_predition", 
+                files={'file': ('audio.wav', buffer, 'audio/wav')},
+                timeout=30
+            )
+
+            if response.status_code == 200:
+                try:
+                    response_json = response.json()
+                    logging.warning(f"[INFO] current_page == 3: {response.text}")
+                    self.prediction_status.set("Connecting to server...")
+                    threading.Thread(
+                        target=self._run_async_stream,
+                        args=(response_json['job_id'],),
+                        daemon=True
+                    ).start()
+                except json.JSONDecodeError:
+                    logging.warning(f"[WARNING] Invalid JSON response: {response.text}")
+            else:
+                logging.warning(f"[WARNING] Error Send File To Server: {response.status_code} - {response.text}")
+
+    def _run_async_stream(self, job_id):
+        asyncio.run(self.stream_job(job_id))
+
+    async def stream_job(self, job_id):
+        ws_url = f"{self.SERVERWS_DOMAIN}:5765/stream_prediction/{job_id}"
+        async with websockets.connect(ws_url) as ws:
+            self.prediction_status.set("Connected. Receiving server events...")
+            while True:
+                msg = await ws.recv()
+                data = json.loads(msg)
+                logging.warning(f"[INFO] current_page == 3: {json.dumps(data, indent=2)}")
+
+                if "msg" in data:
+                    self.processing_progress['value'] = data.get('prog')
+                    self.prediction_status.set(f"{data['msg']}")
+
+                if data.get("stage") == "done" or "result" in data:
+                    result = data["result"]
+                    if result['success']:
+                        self.txtrecord.set("Ready to Record")
+                        self.processing_progress.pack_forget()
+
+                        self.non_tb_progress['value'] = result['class_0_pct']
+                        self.tb_progress['value'] = result['class_1_pct'] 
+
+                        self.non_tb_percentage.set(f"{result['class_0_pct']:.1f}%")
+                        self.tb_percentage.set(f"{result['class_1_pct']:.1f}%")
+
+                        if result['class_1_pct'] > 50:
+                            self.prediction_status.set("⚠️ High TB probability detected!")
+                        else:
+                            self.prediction_status.set("✅ Low TB probability - likely healthy cough")
+                    else:
+                        self.txtrecord.set("Ready to Record")
+                        self.processing_progress.pack_forget()
+                        self.tb_progress['value'] = 0.0
+                        self.non_tb_progress['value'] = 0.0
+                        self.non_tb_percentage.set(f"0.0%")
+                        self.tb_percentage.set(f"0.0%")
+                        self.prediction_status.set(f"No Valid Cough Detected.......")
+                    break
 
     def method_similarity_ratio(self, a, b):
         if a.shape != b.shape:
