@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import time, os, logging, json, glob, re, socket, requests
+import time, os, logging, json, glob, re, socket, requests, uuid, math
 from datetime import datetime
 from threading import Thread, Lock
 from collections import deque
@@ -58,7 +58,6 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 config_path = os.path.join(script_dir, 'config.json')
 with open(config_path) as data_file:    
     GLOBAL_CONFIG = json.load(data_file, object_hook=lambda d: SimpleNamespace(**d))
-
 
 class CoughTk():
     """CoughAnalyzer Program with GUI
@@ -752,7 +751,8 @@ class CoughTk():
                 self.fig.canvas.draw()
                 self.fig.canvas.flush_events()
                 self.last_updateFigure = time.time()
-
+    
+    # TODO : Add Cancel Record Button
     def record_audio_loop(self):
         while True:
             if self.current_page == 2 or self.current_page == 3:
@@ -776,30 +776,41 @@ class CoughTk():
                             else:
                                 with open(self.BTN2_FILE, "r") as stt:
                                     RecSttop = stt.read().strip()
+                                with open(self.BTN3_FILE, "r") as cancel_stt:
+                                    RecCancel = cancel_stt.read().strip()
+
                                 should_stop = RecSttop == '0'
+                                should_cancel = RecCancel == '0'
+
                                 if should_stop:
                                     with open(self.BTN2_FILE, "w") as out:
+                                        out.write('1')
+                                if should_cancel:
+                                    with open(self.BTN3_FILE, "w") as out:
                                         out.write('1')
                                         
                             if self.recording_start_time and not self.recording_time_thread:
                                 self.start_recording_time_update()
-                                
-                            if should_stop:
-                                data_np = np.array(self.audio_buffer, dtype=np.float32)
+
+                            if should_stop or should_cancel:
                                 self.RECORD_FLAG = False
                                 self.recording_start_time = None
-
-                                logging.info(f"[DEBUG] Recording stopped. Buffer length: {len(self.audio_buffer)}, RECORD_LENGTH: {self.RECORD_LENGTH}")
-
+                                self.stop_recording_time_update()
                                 if self.current_page == 2:
                                     self.txtrecord.set("Recording: Automatic")
+                                    self.patch_plot.set_facecolor('blue')
+                                    self.do_updatefigure(ignore_cooldown=True)
                                 elif self.current_page == 3:
                                     self.txtrecord.set("Ready to Record")
-                                self.patch_plot.set_facecolor('blue')
-                                self.do_updatefigure(ignore_cooldown=True)
 
-                                t = Thread(target=self.handle_record_soli, args=(data_np.copy(),))
-                                t.start()
+                                if  should_cancel:
+                                    logging.info(f"[DEBUG] Recording cancelled by user. Buffer length: {len(self.audio_buffer)}")
+                                elif should_stop:
+                                    data_np = np.array(self.audio_buffer, dtype=np.float32)
+                                    logging.info(f"[DEBUG] Recording stopped. Buffer length: {len(self.audio_buffer)}, RECORD_LENGTH: {self.RECORD_LENGTH}")
+                                    t = Thread(target=self.handle_record_soli, args=(data_np.copy(),))
+                                    t.start()
+
                                 self.next_time = time.time()
                                 self.audio_buffer.clear()
                     else:
@@ -937,33 +948,71 @@ class CoughTk():
             self.txtrecord.set("Waiting For Prediction to complete....")
             self.prediction_status.set("Uploading Cough Samples...")
             self.processing_progress.pack(pady=5)
-            self.processing_progress['value'] = 10
+            self.processing_progress['value'] = 0
 
+            # import librosa
+            # audio_np, _ = librosa.load("/run/media/arkiven4/Other/Thesis/CoughThesis/PengambilanDataPrimer/Cough_RT/03-399-0304.wav", sr=self.SAMPLE_RATE)
             audio_np = audio_np[self.AUDIO_POINT_START:]
             buffer = io.BytesIO()
             sf.write(buffer, audio_np, self.SAMPLE_RATE, format='WAV', subtype='PCM_24')
-            buffer.seek(0)
-            
-            response = requests.post(
-                f"{self.SERVER_DOMAIN}:5765/submit_predition", 
-                files={'file': ('audio.wav', buffer, 'audio/wav')},
-                timeout=30
-            )
+            #buffer.seek(0)
+            boundary = uuid.uuid4().hex
 
-            if response.status_code == 200:
-                try:
-                    response_json = response.json()
-                    logging.warning(f"[INFO] current_page == 3: {response.text}")
-                    self.prediction_status.set("Connecting to server...")
-                    threading.Thread(
-                        target=self._run_async_stream,
-                        args=(response_json['job_id'],),
-                        daemon=True
-                    ).start()
-                except json.JSONDecodeError:
-                    logging.warning(f"[WARNING] Invalid JSON response: {response.text}")
-            else:
-                logging.warning(f"[WARNING] Error Send File To Server: {response.status_code} - {response.text}")
+            stream = multipart_stream(buffer, boundary, self.on_progress)
+            headers = {
+                "Content-Type": f"multipart/form-data; boundary={boundary}"
+            }
+            
+            # TODO: Cloudflaretunneling maybe more fast
+            try:
+                response = requests.post(
+                    f"{self.SERVER_DOMAIN}:5765/submit_predition", 
+                    data=stream,
+                    headers=headers,
+                    #files={'file': ('audio.wav', buffer, 'audio/wav')},
+                    timeout=90
+                )
+
+                if response.status_code == 200:
+                    try:
+                        response_json = response.json()
+                        logging.warning(f"[INFO] current_page == 3: {response.text}")
+                        self.prediction_status.set("Connecting to server...")
+                        threading.Thread(
+                            target=self._run_async_stream,
+                            args=(response_json['job_id'],),
+                            daemon=True
+                        ).start()
+                    except json.JSONDecodeError:
+                        logging.warning(f"[WARNING] Invalid JSON response: {response.text}")
+                else:
+                    self.txtrecord.set("Ready to Record")
+                    self.processing_progress.pack_forget()
+                    self.tb_progress['value'] = 0.0
+                    self.non_tb_progress['value'] = 0.0
+                    self.non_tb_percentage.set(f"0.0%")
+                    self.tb_percentage.set(f"0.0%")
+                    self.prediction_status.set(f"❌ Unknown error - Please try again")
+                    logging.warning(f"[WARNING] Error Send File To Server: {response.status_code} - {response.text}")
+            except Exception as e:
+                logging.error(f"[ERROR] Unexpected error during upload: {e}")
+                self.txtrecord.set("Ready to Record")
+                self.processing_progress.pack_forget()
+                self.tb_progress['value'] = 0.0
+                self.non_tb_progress['value'] = 0.0
+                self.non_tb_percentage.set(f"0.0%")
+                self.tb_percentage.set(f"0.0%")
+                self.prediction_status.set("❌ Unknown error - Please try again")
+                return
+
+    def on_progress(self, speed, pct, eta):
+        kbps = speed / 1024
+        eta_str = f"{eta:.1f}s" if eta != float("inf") else "∞"
+        self.prediction_status.set(
+            f"Uploading… {kbps:.1f} KB/s | {pct:.1f}% | ETA {eta_str}"
+        )
+        self.processing_progress["value"] = pct
+        #self.processing_progress.update_idletasks()
 
     def _run_async_stream(self, job_id):
         asyncio.run(self.stream_job(job_id))
@@ -1087,6 +1136,43 @@ class CoughTk():
                     logging.warning(f"[ERROR] Unexpected error sending file {nowfile}: {e}")
 
                 time.sleep(2)
+
+def multipart_stream(buffer, boundary, progress_callback):
+    buffer.seek(0)
+    total_bytes = len(buffer.getvalue())
+    sent = 0
+    start = time.time()
+
+    header = (
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="file"; filename="audio.wav"\r\n'
+        f"Content-Type: audio/wav\r\n\r\n"
+    ).encode()
+
+    yield header
+    sent += len(header)
+
+    while True:
+        chunk = buffer.read(65536)
+        if not chunk:
+            break
+
+        sent += len(chunk)
+
+        elapsed = time.time() - start
+        speed = sent / elapsed if elapsed > 0 else 0
+        remaining = total_bytes - sent
+        eta_sec = remaining / speed if speed > 0 else math.inf
+
+        pct = (sent / total_bytes) * 100
+        progress_callback(speed, pct, eta_sec)
+
+        yield chunk
+
+    closing = f"\r\n--{boundary}--\r\n".encode()
+    sent += len(closing)
+    yield closing
+
 
 if __name__ == "__main__":
     cough = CoughTk()
