@@ -85,7 +85,8 @@ class CoughTk():
     SERVER_DOMAIN = GLOBAL_CONFIG.SERVER_DOMAIN
     SERVERWS_DOMAIN = GLOBAL_CONFIG.SERVERWS_DOMAIN
     DEVICE_ID = GLOBAL_CONFIG.DEVICE_ID
-
+    SEND_COUGH = GLOBAL_CONFIG.SEND_COUGH
+    
     def __init__(self):
         super(CoughTk, self).__init__()
 
@@ -93,7 +94,7 @@ class CoughTk():
         self.window = tk.Tk()
         self.window.geometry("480x320")
         self.window.title("TBCare - CoughAnalyzer")
-        self.current_page = 3
+        self.current_page = 1
 
         self.main_frame = tk.Frame(self.window)
         self.main_frame.pack(fill=tk.BOTH, expand=True)
@@ -148,6 +149,9 @@ class CoughTk():
         self.recording_time_stop_event = threading.Event()
         self.buffer_size = int(self.STEP_DURATION * self.SAMPLE_RATE)
         self.window_size = int(self.WINDOW_DURATION * self.SAMPLE_RATE)
+
+        self.send_lock = Lock()
+        self.is_sending = False
 
         # Initialize a
         # udio system
@@ -582,6 +586,7 @@ class CoughTk():
         Thread(target=self.getCurrentPatient, daemon=True).start()
         Thread(target=self.button_navigation_loop, daemon=True).start()
         Thread(target=self.record_audio_loop, daemon=True).start()
+        Thread(target=self.sendcoughdataprocess, daemon=True).start()
             
 
     def getwlanip(self):
@@ -679,22 +684,23 @@ class CoughTk():
 
             time.sleep(5)
 
+    # TODO: Dynammic internet status
     def sendcoughdataprocess(self):
+        logging.warning(f"[INFO] Start Sending Cough {self.internet_status.get()}, {self.SEND_COUGH}, {self.internet_status.get() == '🌍On|' and self.SEND_COUGH == True}")
         while True:
-            if self.internet_status.get() == "Online" and GLOBAL_CONFIG.SEND_COUGH == True:
-                #self.send_one_data_server("last_send_automatic", "cough", "automatic")
-                self.send_one_data_server("last_send_soliced", "solic", "soliced")
+            if self.internet_status.get() == "🌍On|" and self.SEND_COUGH == True:
+                with self.send_lock:
+                    if not self.is_sending:
+                        self.is_sending = True
+                        try:
+                            #self.send_one_data_server("last_send_automatic", "cough", "automatic")
+                            self.send_one_data_server("last_send_soliced", "solic", "soliced")
+                        finally:
+                            self.is_sending = False
+                    else:
+                        logging.info("[INFO] Skipping send operation - previous send still in progress")
 
             time.sleep(5)
-
-    # def sendstatusdeviceAPIprocess(self):
-    #     while True:
-    #         autocoughcount = len(next(os.walk("Recorded_Data/automatic"))[2])
-    #         solicoughcount = len(next(os.walk("Recorded_Data/soliced"))[2])
-
-    #         response = requests.post(f"{self.SERVER_DOMAIN}/api/device_status", 
-    #                         data={'device_id': self.DEVICE_ID, 'autocoughcount': autocoughcount, 'solicoughcount': solicoughcount})
-    #         time.sleep(3)
 
     def start_recording_time_update(self):
         self.recording_time_stop_event.clear()
