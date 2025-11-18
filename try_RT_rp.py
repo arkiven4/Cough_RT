@@ -950,8 +950,8 @@ class CoughTk():
             self.processing_progress.pack(pady=5)
             self.processing_progress['value'] = 0
 
-            # import librosa
-            # audio_np, _ = librosa.load("/run/media/arkiven4/Other/Thesis/CoughThesis/PengambilanDataPrimer/Cough_RT/03-399-0304.wav", sr=self.SAMPLE_RATE)
+            #import librosa
+            #audio_np, _ = librosa.load("/run/media/arkiven4/Other/Thesis/CoughThesis/PengambilanDataPrimer/Cough_RT/03-399-0304.wav", sr=self.SAMPLE_RATE)
             audio_np = audio_np[self.AUDIO_POINT_START:]
             buffer = io.BytesIO()
             sf.write(buffer, audio_np, self.SAMPLE_RATE, format='WAV', subtype='PCM_24')
@@ -1019,42 +1019,70 @@ class CoughTk():
 
     async def stream_job(self, job_id):
         ws_url = f"{self.SERVERWS_DOMAIN}:5765/stream_prediction/{job_id}"
-        async with websockets.connect(ws_url) as ws:
-            self.prediction_status.set("Connected. Receiving server events...")
-            while True:
-                msg = await ws.recv()
-                data = json.loads(msg)
-                logging.warning(f"[INFO] current_page == 3: {json.dumps(data, indent=2)}")
+        try:
+            async with websockets.connect(ws_url) as ws:
+                self.prediction_status.set("Connected. Receiving server events...")
+                while True:
+                    try:
+                        msg = await asyncio.wait_for(ws.recv(), timeout=60)
+                        data = json.loads(msg)
+                        logging.warning(f"[INFO] current_page == 3: {json.dumps(data, indent=2)}")
 
-                if "msg" in data:
-                    self.processing_progress['value'] = data.get('prog')
-                    self.prediction_status.set(f"{data['msg']}")
+                        if "msg" in data:
+                            self.processing_progress['value'] = data.get('prog')
+                            self.prediction_status.set(f"{data['msg']}")
 
-                if data.get("stage") == "done" or "result" in data:
-                    result = data["result"]
-                    if result['success']:
-                        self.txtrecord.set("Ready to Record")
-                        self.processing_progress.pack_forget()
+                        if data.get("stage") == "done" or "result" in data:
+                            result = data["result"]
+                            if result['success']:
+                                self.txtrecord.set("Ready to Record")
+                                self.processing_progress.pack_forget()
 
-                        self.non_tb_progress['value'] = result['class_0_pct']
-                        self.tb_progress['value'] = result['class_1_pct'] 
+                                self.non_tb_progress['value'] = result['class_0_pct']
+                                self.tb_progress['value'] = result['class_1_pct'] 
 
-                        self.non_tb_percentage.set(f"{result['class_0_pct']:.1f}%")
-                        self.tb_percentage.set(f"{result['class_1_pct']:.1f}%")
+                                self.non_tb_percentage.set(f"{result['class_0_pct']:.1f}%")
+                                self.tb_percentage.set(f"{result['class_1_pct']:.1f}%")
 
-                        if result['class_1_pct'] > 50:
-                            self.prediction_status.set("⚠️ High TB probability detected!")
-                        else:
-                            self.prediction_status.set("✅ Low TB probability - likely healthy cough")
-                    else:
-                        self.txtrecord.set("Ready to Record")
-                        self.processing_progress.pack_forget()
-                        self.tb_progress['value'] = 0.0
-                        self.non_tb_progress['value'] = 0.0
-                        self.non_tb_percentage.set(f"0.0%")
-                        self.tb_percentage.set(f"0.0%")
-                        self.prediction_status.set(f"No Valid Cough Detected.......")
-                    break
+                                if result['class_1_pct'] > 50:
+                                    self.prediction_status.set("⚠️ High TB probability detected!")
+                                else:
+                                    self.prediction_status.set("✅ Low TB probability - likely healthy cough")
+                            else:
+                                self.txtrecord.set("Ready to Record")
+                                self.processing_progress.pack_forget()
+                                self.tb_progress['value'] = 0.0
+                                self.non_tb_progress['value'] = 0.0
+                                self.non_tb_percentage.set(f"0.0%")
+                                self.tb_percentage.set(f"0.0%")
+                                self.prediction_status.set(f"No Valid Cough Detected.......")
+                            break
+                            
+                    except asyncio.TimeoutError:
+                        logging.error("[ERROR] WebSocket receive timeout")
+                        break
+                        
+        except (asyncio.TimeoutError, websockets.exceptions.ConnectionClosed, websockets.exceptions.WebSocketException) as e:
+            logging.error(f"[ERROR] WebSocket connection failed: {e}")
+            # Reset UI state on connection failure
+            self.txtrecord.set("Ready to Record")
+            self.processing_progress.pack_forget()
+            self.tb_progress['value'] = 0.0
+            self.non_tb_progress['value'] = 0.0
+            self.non_tb_percentage.set("0.0%")
+            self.tb_percentage.set("0.0%")
+            self.prediction_status.set("❌ Connection timeout - Please try again")
+            
+        except Exception as e:
+            logging.error(f"[ERROR] Unexpected WebSocket error: {e}")
+            # Reset UI state on unexpected error
+            self.txtrecord.set("Ready to Record")
+            self.processing_progress.pack_forget()
+            self.tb_progress['value'] = 0.0
+            self.non_tb_progress['value'] = 0.0
+            self.non_tb_percentage.set("0.0%")
+            self.tb_percentage.set("0.0%")
+            self.prediction_status.set("❌ Connection error - Please try again")
 
     def method_similarity_ratio(self, a, b):
         if a.shape != b.shape:
