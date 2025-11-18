@@ -153,6 +153,10 @@ class CoughTk():
         self.send_lock = Lock()
         self.is_sending = False
 
+        self._anim_task = None
+        self._anim_running = False
+        self._anim_base_text = ""
+
         # Initialize a
         # udio system
         self.pcm = alsa.PCM(alsa.PCM_CAPTURE, alsa.PCM_NORMAL,
@@ -1020,6 +1024,31 @@ class CoughTk():
         self.processing_progress["value"] = pct
         #self.processing_progress.update_idletasks()
 
+    def _start_animation(self, base_text):
+        # stop old animation
+        self._stop_animation()
+        self._anim_running = True
+        self._anim_base_text = base_text
+
+        async def animate():
+            dots = ["", ".", "..", "...", "...."]
+            i = 0
+            while self._anim_running:
+                animated_text = f"{base_text}{dots[i]}"
+                self.prediction_status.set(animated_text)
+                i = (i + 1) % len(dots)
+                await asyncio.sleep(0.25)
+
+        # launch async task
+        self._anim_task = asyncio.create_task(animate())
+
+
+    def _stop_animation(self):
+        self._anim_running = False
+        if self._anim_task:
+            self._anim_task.cancel()
+            self._anim_task = None
+
     def _run_async_stream(self, job_id):
         asyncio.run(self.stream_job(job_id))
 
@@ -1036,9 +1065,11 @@ class CoughTk():
 
                         if "msg" in data:
                             self.processing_progress['value'] = data.get('prog')
-                            self.prediction_status.set(f"{data['msg']}")
+                            self._start_animation(data["msg"])
+                            #self.prediction_status.set(f"{data['msg']}")
 
                         if data.get("stage") == "done" or "result" in data:
+                            self._stop_animation()
                             result = data["result"]
                             if result['success']:
                                 self.txtrecord.set("Ready to Record")
